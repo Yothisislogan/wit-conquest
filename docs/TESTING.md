@@ -7,7 +7,7 @@ npm run test:e2e    # Playwright
 npm run test:all    # all three
 ```
 
-Both suites are green at the time of writing: **165 unit tests** and **166
+Both suites are green at the time of writing: **165 unit tests** and **198
 end-to-end tests** across four viewport profiles.
 
 ## Unit tests (Vitest)
@@ -48,6 +48,7 @@ touch projects drive the game with real taps; desktop uses clicks, through the
 | `accessibility.spec.ts`| Cell labels, named move types, grid roles, live-region announcements, arrow-key navigation, Escape, `R`-to-restart confirmation, roving tabindex, dialog focus trapping, reduced motion, high contrast, coordinate labels |
 | `tutorial.spec.ts`     | Each lesson advances by doing the thing it teaches; Next/Back/Skip                               |
 | `pwa.spec.ts`          | Manifest validity, every icon served and non-trivial, theme colour, service worker registration, full offline reload and offline play against the computer |
+| `persistence.spec.ts`  | Resuming an interrupted match from the menu and across a reload, starting fresh discarding the save, preferences surviving a reload, sound toggling, statistics and reset, board previews |
 
 Deep links make setup deterministic: `?start=1&board=islands&mode=local-two-player&motion=reduced&seed=42`.
 
@@ -92,3 +93,7 @@ Kept as a record of what the tests are actually worth:
 3. **The board overflowed the viewport on short, wide screens.** An SVG with a
    `viewBox` is a replaced element with an intrinsic ratio, so its automatic grid
    minimum size beat `height: 100%`.
+4. **"Resume match" showed on a fresh install.** The user-agent
+   `[hidden] { display: none }` rule is a bare attribute selector, so
+   `.btn { display: inline-flex }` beat it. The attribute is now authoritative
+   for every component.

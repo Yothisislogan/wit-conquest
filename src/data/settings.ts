@@ -21,7 +21,6 @@ export type ContrastPreference = 'auto' | 'high';
 
 export interface Settings {
   soundEnabled: boolean;
-  musicEnabled: boolean;
   /** 0..1 */
   volume: number;
   difficulty: Difficulty;
@@ -39,7 +38,6 @@ export const DEFAULT_SETTINGS: Settings = Object.freeze({
   // Muted until the player opts in, which also keeps us on the right side of
   // browser autoplay policies.
   soundEnabled: false,
-  musicEnabled: false,
   volume: 0.7,
   difficulty: 'normal',
   boardId: DEFAULT_BOARD_ID,
@@ -117,7 +115,6 @@ export function loadSettings(): Settings {
   const raw = readJson<Settings>(SETTINGS_KEY) ?? {};
   return {
     soundEnabled: typeof raw.soundEnabled === 'boolean' ? raw.soundEnabled : DEFAULT_SETTINGS.soundEnabled,
-    musicEnabled: typeof raw.musicEnabled === 'boolean' ? raw.musicEnabled : DEFAULT_SETTINGS.musicEnabled,
     volume: typeof raw.volume === 'number' && raw.volume >= 0 && raw.volume <= 1 ? raw.volume : DEFAULT_SETTINGS.volume,
     difficulty: DIFFICULTIES.has(raw.difficulty as Difficulty) ? (raw.difficulty as Difficulty) : DEFAULT_SETTINGS.difficulty,
     boardId: resolveBoardId(raw.boardId),

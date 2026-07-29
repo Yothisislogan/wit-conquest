@@ -252,10 +252,6 @@ for (const button of soundButtons) {
 /* ----------------------------------------------------------------- settings */
 
 const setSoundSwitch = bindSwitch(need<HTMLElement>('set-sound'), setSoundEnabled);
-const setMusicSwitch = bindSwitch(need<HTMLElement>('set-music'), (checked) => {
-  settings.musicEnabled = checked;
-  saveSettings(settings);
-});
 const setCoordsSwitch = bindSwitch(need<HTMLElement>('set-coords'), (checked) => {
   settings.showCoordinates = checked;
   saveSettings(settings);
@@ -323,7 +319,6 @@ need<HTMLButtonElement>('btn-reset-stats').addEventListener('click', () => {
 });
 
 setSoundSwitch(settings.soundEnabled);
-setMusicSwitch(settings.musicEnabled);
 setCoordsSwitch(settings.showCoordinates);
 setUndoSwitch(settings.allowUndoInLocalPlay);
 setMotionValue(settings.motion);

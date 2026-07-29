@@ -134,6 +134,14 @@
   box-sizing: border-box;
 }
 
+/* The user-agent `[hidden] { display: none }` rule is a bare attribute selector,
+   so any class that sets `display` silently beats it — which is how a hidden
+   `.btn` (display: inline-flex) ends up on screen anyway. Make the attribute
+   authoritative once, here, instead of patching it per component. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
