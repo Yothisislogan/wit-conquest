@@ -93,16 +93,18 @@ export function compileBoard(def: BoardDefinition): BoardGeometry {
     }
   }
 
-  // Group by row (r), then order left to right (q) so labels read naturally.
+  // Group into near-horizontal bands (offset rows), then order left to right,
+  // so "row 3, column 4" reads the way a sighted player would scan the board.
   const byRow = new Map<number, Axial[]>();
   for (const cell of shape) {
-    const bucket = byRow.get(cell.r);
+    const { row } = axialToOffset(cell);
+    const bucket = byRow.get(row);
     if (bucket) bucket.push(cell);
-    else byRow.set(cell.r, [cell]);
+    else byRow.set(row, [cell]);
   }
   const sortedRows = [...byRow.keys()].sort((a, b) => a - b);
-  for (const r of sortedRows) {
-    byRow.get(r)!.sort((a, b) => axialToOffset(a).col - axialToOffset(b).col);
+  for (const row of sortedRows) {
+    byRow.get(row)!.sort((a, b) => axialToOffset(a).col - axialToOffset(b).col);
   }
 
   const cells: HexCell[] = [];
@@ -161,14 +163,16 @@ export function compileBoard(def: BoardDefinition): BoardGeometry {
     initialBoard[p2] = 'player2';
   }
 
+  // Flat-top hexes reach `size` horizontally (centre to corner) and
+  // `sqrt(3)/2 * size` vertically (centre to edge).
   const size = 1;
   const xs = cells.map((c) => c.x);
   const ys = cells.map((c) => c.y);
-  const halfWidth = (Math.sqrt(3) / 2) * size;
-  const minX = Math.min(...xs) - halfWidth;
-  const maxX = Math.max(...xs) + halfWidth;
-  const minY = Math.min(...ys) - size;
-  const maxY = Math.max(...ys) + size;
+  const halfHeight = (Math.sqrt(3) / 2) * size;
+  const minX = Math.min(...xs) - size;
+  const maxX = Math.max(...xs) + size;
+  const minY = Math.min(...ys) - halfHeight;
+  const maxY = Math.max(...ys) + halfHeight;
 
   return {
     id: def.id,

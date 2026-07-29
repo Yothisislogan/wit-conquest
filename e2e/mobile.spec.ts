@@ -47,18 +47,14 @@ test.describe('mobile layout', () => {
     const width = page.viewportSize()!.width;
 
     // Hexes tile edge to edge, so the target is the whole tile with no dead
-    // gaps between them. On any mainstream phone (>= 360 CSS px wide) that
-    // clears the 44px guideline. A 61-space board on a 320px screen physically
-    // cannot: there the tiles are ~36 x 41, and nearest-space resolution plus
-    // destination snapping (see input-controller.ts) carry the difference.
-    if (width >= 360) {
-      expect(minHeight).toBeGreaterThanOrEqual(44);
-      expect(minWidth).toBeGreaterThanOrEqual(40);
-    } else {
-      expect(minHeight).toBeGreaterThanOrEqual(40);
-      expect(minWidth).toBeGreaterThanOrEqual(35);
-    }
-    expect(minWidth * minHeight).toBeGreaterThanOrEqual(44 * 32);
+    // gaps between them. Flat-top orientation puts the wide axis across the
+    // narrow axis of a portrait phone, which is what keeps every tile at or
+    // above 44px wide even on a 320px screen. Height follows on any mainstream
+    // phone; on the very smallest it lands just under, and nearest-space
+    // resolution with destination snapping carries the difference.
+    expect(minWidth, 'tile width').toBeGreaterThanOrEqual(44);
+    expect(minHeight, 'tile height').toBeGreaterThanOrEqual(width >= 360 ? 44 : 39);
+    expect(minWidth * minHeight).toBeGreaterThanOrEqual(44 * 39);
   });
 
   test('the controls stay above the bottom safe area', async ({ page }) => {

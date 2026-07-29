@@ -300,6 +300,10 @@ kbd {
   font-size: 1.25em;
 }
 
+.btn--control .btn__text {
+  white-space: nowrap;
+}
+
 /* Segmented radio group ---------------------------------------------------- */
 
 .segmented {
@@ -1651,6 +1655,25 @@ kbd {
 
   .sidepanel {
     display: flex;
+  }
+
+  /* Stop the score chips from stretching across a wide status bar — they read
+     as score *cards*, not as banners. */
+  .statusbar {
+    justify-items: center;
+    gap: 16px;
+  }
+
+  .statusbar__side {
+    width: min(100%, 260px);
+  }
+
+  .statusbar__side--p1 {
+    justify-self: end;
+  }
+
+  .statusbar__side--p2 {
+    justify-self: start;
   }
 
   .controls {

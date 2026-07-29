@@ -1,8 +1,15 @@
 /**
  * Hex grid maths.
  *
- * Coordinate system: **axial** (`q`, `r`) over **pointy-top** hexes.
+ * Coordinate system: **axial** (`q`, `r`) over **flat-top** hexes.
  * The implicit third cube coordinate is `s = -q - r`.
+ *
+ * Flat-top rather than pointy-top for a mobile reason: a regular hexagonal
+ * board drawn with pointy-top hexes is wider than it is tall, so on a portrait
+ * phone it is width-bound and leaves a band of dead space above and below.
+ * Turned on its side the same board is taller than wide, which is the shape a
+ * phone actually has — the tiles come out roughly a quarter larger for exactly
+ * the same layout.
  *
  * All game logic uses these coordinates. Pixel positions are derived *from*
  * coordinates and never the other way around — adjacency must never be inferred
@@ -12,8 +19,8 @@
 import type { Axial } from './types.ts';
 
 /**
- * The six axial neighbour offsets, listed clockwise starting at "east".
- * For pointy-top hexes these correspond to: E, NE, NW, W, SW, SE.
+ * The six axial neighbour offsets, listed clockwise starting at "south-east".
+ * For flat-top hexes these correspond to: SE, NE, N, NW, SW, S.
  */
 export const HEX_DIRECTIONS: readonly Axial[] = Object.freeze([
   { q: 1, r: 0 },
@@ -26,12 +33,12 @@ export const HEX_DIRECTIONS: readonly Axial[] = Object.freeze([
 
 /** Human-readable names for the six directions, aligned with HEX_DIRECTIONS. */
 export const HEX_DIRECTION_NAMES: readonly string[] = Object.freeze([
-  'east',
-  'north-east',
-  'north-west',
-  'west',
-  'south-west',
   'south-east',
+  'north-east',
+  'north',
+  'north-west',
+  'south-west',
+  'south',
 ]);
 
 /** Stable string key for a coordinate, used for map lookups. */
@@ -122,35 +129,37 @@ export function hexagonShape(radius: number): Axial[] {
 }
 
 /**
- * Converts axial to "odd-r" offset coordinates (rows of hexes, odd rows shifted
- * right). Only used to produce `row`/`column` labels for screen readers.
+ * Converts axial to "odd-q" offset coordinates: columns of hexes, with odd
+ * columns pushed half a step down. Only used to derive the `row`/`column`
+ * numbers that appear in screen-reader labels, where cells sharing a row read
+ * as a near-horizontal band across the board.
  */
 export function axialToOffset(a: Axial): { col: number; row: number } {
-  return { col: a.q + (a.r - (a.r & 1)) / 2, row: a.r };
+  return { col: a.q, row: a.r + (a.q - (a.q & 1)) / 2 };
 }
 
 /** Inverse of {@link axialToOffset}. */
 export function offsetToAxial(col: number, row: number): Axial {
-  return { q: col - (row - (row & 1)) / 2, r: row };
+  return { q: col, r: row - (col - (col & 1)) / 2 };
 }
 
 /**
- * Centre point of a pointy-top hex, in units where `size` is the distance from
+ * Centre point of a flat-top hex, in units where `size` is the distance from
  * the centre to a corner (the circumradius).
  */
 export function axialToPixel(a: Axial, size: number): { x: number; y: number } {
   const SQRT3 = Math.sqrt(3);
   return {
-    x: size * SQRT3 * (a.q + a.r / 2),
-    y: size * 1.5 * a.r,
+    x: size * 1.5 * a.q,
+    y: size * SQRT3 * (a.r + a.q / 2),
   };
 }
 
-/** The six corner points of a pointy-top hex centred at (cx, cy). */
+/** The six corner points of a flat-top hex centred at (cx, cy). */
 export function hexCorners(cx: number, cy: number, size: number): Array<{ x: number; y: number }> {
   const corners: Array<{ x: number; y: number }> = [];
   for (let i = 0; i < 6; i++) {
-    const angle = (Math.PI / 180) * (60 * i - 30);
+    const angle = (Math.PI / 180) * 60 * i;
     corners.push({ x: cx + size * Math.cos(angle), y: cy + size * Math.sin(angle) });
   }
   return corners;
