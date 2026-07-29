@@ -63,14 +63,34 @@ const MAX_CUE_SECONDS = 0.9;
 
 type AudioContextCtor = new (options?: AudioContextOptions) => AudioContext;
 
+interface AudioGlobals {
+  AudioContext?: AudioContextCtor;
+  webkitAudioContext?: AudioContextCtor;
+}
+
+/**
+ * Reads one global constructor, treating a throwing accessor as simply absent.
+ *
+ * Anti-fingerprinting extensions and hardened browsers (Brave farbling, privacy
+ * add-ons) replace these globals with accessors that throw on *read*, so the
+ * lookup itself — not just construction — can raise. For the game that is
+ * indistinguishable from "this environment has no Web Audio", so it must be
+ * reported as unsupported rather than escaping into a turn.
+ */
+function readCtor(key: keyof AudioGlobals): AudioContextCtor | undefined {
+  try {
+    return (globalThis as unknown as AudioGlobals)[key];
+  } catch {
+    return undefined;
+  }
+}
+
 function audioContextCtor(): AudioContextCtor | null {
   // Looked up on every attempt rather than cached at module scope: the module
   // may be imported long before a DOM exists (SSR, worker bootstrap, tests).
-  const scope = globalThis as unknown as {
-    AudioContext?: AudioContextCtor;
-    webkitAudioContext?: AudioContextCtor;
-  };
-  return scope.AudioContext ?? scope.webkitAudioContext ?? null;
+  // The two names are read separately so a poisoned `AudioContext` still leaves
+  // the prefixed WebKit fallback reachable.
+  return readCtor('AudioContext') ?? readCtor('webkitAudioContext') ?? null;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -519,10 +539,12 @@ export class SoundController {
    * sound on mid-match is audible immediately rather than one cue later.
    */
   async unlock(): Promise<void> {
-    const ctx = this.context();
-    if (!ctx) return;
+    // Graph construction lives inside the guard too: a hostile environment can
+    // make even reading `state` or building the context throw, and unlock() is
+    // awaited by the input layer — it must resolve, never reject.
     try {
-      if (ctx.state === 'suspended') await ctx.resume();
+      const ctx = this.context();
+      if (ctx?.state === 'suspended') await ctx.resume();
     } catch {
       /* Autoplay policy or a closed context: stay silent, never reject. */
     }
@@ -530,10 +552,11 @@ export class SoundController {
 
   play(name: SoundName, options?: { intensity?: number }): void {
     if (this.disposed || !this.enabledFlag || this.volumeLevel <= 0) return;
-    const ctx = this.context();
-    if (!ctx) return;
 
     try {
+      const ctx = this.context();
+      if (!ctx) return;
+
       if (ctx.state !== 'running') {
         // Nothing can be heard before the first gesture. Ask for a resume so the
         // next cue lands, and drop this one instead of queueing stale audio.

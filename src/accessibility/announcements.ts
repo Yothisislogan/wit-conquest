@@ -15,20 +15,36 @@ export class Announcer {
   #polite: HTMLElement | null;
   #assertive: HTMLElement | null;
   #lastPolite = '';
+  #pending: string[] = [];
+  #flush: ReturnType<typeof setTimeout> | null = null;
 
   constructor(politeId = 'live-polite', assertiveId = 'live-assertive') {
     this.#polite = document.getElementById(politeId);
     this.#assertive = document.getElementById(assertiveId);
   }
 
-  /** Non-interrupting: turn changes, move results, score updates. */
+  /**
+   * Non-interrupting: turn changes, move results, score updates.
+   *
+   * A single move produces several of these back to back ("you cloned…",
+   * "opponent's turn"). Writing them one after another into the same live
+   * region would leave a screen reader announcing only the last, so messages
+   * raised in the same tick are coalesced into one utterance.
+   */
   say(message: string): void {
     if (!this.#polite || !message) return;
-    // Repeating identical text is silently dropped by most screen readers, so
-    // nudge it with a zero-width space to force a re-announcement.
-    const text = message === this.#lastPolite ? `${message}​` : message;
-    this.#lastPolite = message;
-    this.#polite.textContent = text;
+    this.#pending.push(message);
+    if (this.#flush !== null) return;
+    this.#flush = setTimeout(() => {
+      this.#flush = null;
+      const combined = [...new Set(this.#pending)].join(' ');
+      this.#pending = [];
+      if (!this.#polite || !combined) return;
+      // Repeating identical text is silently dropped by most screen readers, so
+      // nudge it with a zero-width space to force a re-announcement.
+      this.#polite.textContent = combined === this.#lastPolite ? `${combined}​` : combined;
+      this.#lastPolite = combined;
+    }, 0);
   }
 
   /** Interrupting: results and errors that must not wait in the queue. */
@@ -42,6 +58,9 @@ export class Announcer {
   }
 
   clear(): void {
+    if (this.#flush !== null) clearTimeout(this.#flush);
+    this.#flush = null;
+    this.#pending = [];
     if (this.#polite) this.#polite.textContent = '';
     if (this.#assertive) this.#assertive.textContent = '';
     this.#lastPolite = '';

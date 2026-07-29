@@ -592,48 +592,56 @@ function monsterBodyPath() {
 }
 
 function faviconSvg() {
-  const { antenna, eye, pupil, spark, mouth, shadow, gradient } = DESIGN;
-  const mouthLeft = [mouth.cx - mouth.r * Math.sin(mouth.halfSpan), mouth.cy + mouth.r * Math.cos(mouth.halfSpan)];
-  const mouthRight = [mouth.cx + mouth.r * Math.sin(mouth.halfSpan), mouth.cy + mouth.r * Math.cos(mouth.halfSpan)];
-  const mirrorX = (x) => 1 - x;
+  const { antenna, eye, pupil, spark, mouth, shadow, glow, body, gradient } = DESIGN;
+  const arcY = mouth.cy + mouth.r * Math.cos(mouth.halfSpan);
+  const arcDx = mouth.r * Math.sin(mouth.halfSpan);
+  const mirror = (x) => 1 - x;
+  const hex = roundedHexPath();
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${S} ${S}" width="${S}" height="${S}" role="img" aria-label="Monster Territory">
   <title>Monster Territory</title>
   <defs>
-    <linearGradient id="tile" x1="${u(gradient.ax)}" y1="${u(gradient.ay)}" x2="${u(gradient.bx)}" y2="${u(gradient.by)}" gradientUnits="userSpaceOnUse">
+    <linearGradient id="mt-tile" x1="${u(gradient.ax)}" y1="${u(gradient.ay)}" x2="${u(gradient.bx)}" y2="${u(gradient.by)}" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="${PALETTE.tileTop}"/>
       <stop offset="0.55" stop-color="${PALETTE.tileMid}"/>
       <stop offset="1" stop-color="${PALETTE.tileBottom}"/>
     </linearGradient>
-    <linearGradient id="skin" x1="0" y1="${u(DESIGN.body.cy - DESIGN.body.hy)}" x2="0" y2="${u(DESIGN.body.cy + DESIGN.body.hy)}" gradientUnits="userSpaceOnUse">
+    <linearGradient id="mt-sheen" x1="0" y1="${u(0.06)}" x2="0" y2="${u(0.46)}" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="${PALETTE.gloss}" stop-opacity="0.15"/>
+      <stop offset="0.5" stop-color="${PALETTE.gloss}" stop-opacity="0.038"/>
+      <stop offset="1" stop-color="${PALETTE.gloss}" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="mt-skin" x1="0" y1="${u(body.cy - body.hy)}" x2="0" y2="${u(body.cy + body.hy)}" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="${PALETTE.bodyTop}"/>
       <stop offset="1" stop-color="${PALETTE.bodyBottom}"/>
     </linearGradient>
-    <radialGradient id="halo" cx="${u(DESIGN.glow.cx)}" cy="${u(DESIGN.glow.cy)}" r="${u(DESIGN.glow.radius)}" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="${PALETTE.glow}" stop-opacity="0.22"/>
+    <radialGradient id="mt-halo" cx="${u(glow.cx)}" cy="${u(glow.cy)}" r="${u(glow.radius)}" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="${PALETTE.glow}" stop-opacity="${glow.strength}"/>
       <stop offset="1" stop-color="${PALETTE.glow}" stop-opacity="0"/>
     </radialGradient>
-    <path id="tile-shape" d="${roundedHexPath()}"/>
-    <clipPath id="tile-clip"><use href="#tile-shape"/></clipPath>
+    <clipPath id="mt-clip"><path d="${hex}"/></clipPath>
   </defs>
 
-  <use href="#tile-shape" fill="url(#tile)"/>
-  <g clip-path="url(#tile-clip)">
-    <rect x="0" y="0" width="${S}" height="${S}" fill="url(#halo)"/>
+  <path d="${hex}" fill="url(#mt-tile)"/>
+  <g clip-path="url(#mt-clip)">
+    <rect x="0" y="0" width="${S}" height="${S}" fill="url(#mt-sheen)"/>
+    <rect x="0" y="0" width="${S}" height="${S}" fill="url(#mt-halo)"/>
     <ellipse cx="${u(shadow.cx)}" cy="${u(shadow.cy)}" rx="${u(shadow.rx)}" ry="${u(shadow.ry)}" fill="${PALETTE.shadow}" opacity="${shadow.strength}"/>
-    <g stroke="url(#skin)" stroke-linecap="round" stroke-width="${u(antenna.stem * 2)}">
+    <g stroke="url(#mt-skin)" stroke-linecap="round" stroke-width="${u(antenna.stem * 2)}">
       <line x1="${u(antenna.rootX)}" y1="${u(antenna.rootY)}" x2="${u(antenna.tipX)}" y2="${u(antenna.tipY)}"/>
-      <line x1="${u(mirrorX(antenna.rootX))}" y1="${u(antenna.rootY)}" x2="${u(mirrorX(antenna.tipX))}" y2="${u(antenna.tipY)}"/>
+      <line x1="${u(mirror(antenna.rootX))}" y1="${u(antenna.rootY)}" x2="${u(mirror(antenna.tipX))}" y2="${u(antenna.tipY)}"/>
     </g>
-    <circle cx="${u(antenna.tipX)}" cy="${u(antenna.tipY)}" r="${u(antenna.bulb)}" fill="url(#skin)"/>
-    <circle cx="${u(mirrorX(antenna.tipX))}" cy="${u(antenna.tipY)}" r="${u(antenna.bulb)}" fill="url(#skin)"/>
-    <path d="${monsterBodyPath()}" fill="url(#skin)"/>
-    <path d="M ${u(mouthLeft[0])} ${u(mouthLeft[1])} A ${u(mouth.r)} ${u(mouth.r)} 0 0 0 ${u(mouthRight[0])} ${u(mouthRight[1])}" fill="none" stroke="${PALETTE.pupil}" stroke-width="${u(mouth.halfThickness * 2)}" stroke-linecap="round"/>
+    <circle cx="${u(antenna.tipX)}" cy="${u(antenna.tipY)}" r="${u(antenna.bulb)}" fill="url(#mt-skin)"/>
+    <circle cx="${u(mirror(antenna.tipX))}" cy="${u(antenna.tipY)}" r="${u(antenna.bulb)}" fill="url(#mt-skin)"/>
+    <path d="${monsterBodyPath()}" fill="url(#mt-skin)"/>
+    <path d="M ${u(mouth.cx - arcDx)} ${u(arcY)} A ${u(mouth.r)} ${u(mouth.r)} 0 0 0 ${u(mouth.cx + arcDx)} ${u(arcY)}" fill="none" stroke="${PALETTE.pupil}" stroke-width="${u(mouth.halfThickness * 2)}" stroke-linecap="round"/>
     <circle cx="${u(eye.cx)}" cy="${u(eye.cy)}" r="${u(eye.r)}" fill="${PALETTE.sclera}"/>
     <circle cx="${u(pupil.cx)}" cy="${u(pupil.cy)}" r="${u(pupil.r)}" fill="${PALETTE.pupil}"/>
     <circle cx="${u(spark.cx)}" cy="${u(spark.cy)}" r="${u(spark.r)}" fill="${PALETTE.spark}" opacity="0.92"/>
+    <!-- Stroked at double width and clipped, so the rim sits wholly inside the
+         tile exactly as it does in the rasterised icons. -->
+    <path d="${hex}" fill="none" stroke="${PALETTE.rim}" stroke-opacity="0.4" stroke-width="${u(DESIGN.rimWidth * 2)}"/>
   </g>
-  <use href="#tile-shape" fill="none" stroke="${PALETTE.rim}" stroke-opacity="0.4" stroke-width="${u(DESIGN.rimWidth)}"/>
 </svg>
 `;
 }

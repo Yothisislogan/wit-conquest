@@ -904,6 +904,12 @@ kbd {
 .board {
   width: 100%;
   height: 100%;
+  /* An SVG with a viewBox is a replaced element with an intrinsic ratio, so as
+     a grid item its automatic minimum size is derived from its width. Without
+     these it wins over `height: 100%` and the board overflows the bottom of the
+     screen on short, wide viewports. */
+  min-width: 0;
+  min-height: 0;
   display: block;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
@@ -1561,6 +1567,24 @@ kbd {
 }
 
 /* ----------------------------------------------------- 7. responsive tiers */
+
+/* Narrow phones: give the board every pixel of width it can get. The board is
+   width-bound at this size, so horizontal padding comes straight off the hexes
+   (and therefore off the size of every touch target). */
+@media (max-width: 380px) {
+  .boardarea {
+    padding: 2px 0;
+  }
+
+  .statusbar {
+    padding-inline: 8px;
+  }
+
+  .controls {
+    gap: 6px;
+    padding-inline: 6px;
+  }
+}
 
 /* Landscape phones: put the board beside the chrome instead of below it. */
 @media (orientation: landscape) and (max-height: 560px) {

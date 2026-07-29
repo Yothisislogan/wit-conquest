@@ -21,7 +21,12 @@ const HEX_DRAW_SCALE = 0.93;
 /** …while the invisible hit shape stays full size, leaving no dead gaps. */
 const HEX_HIT_SCALE = 1.02;
 const PIECE_SCALE = 0.52;
-const VIEW_PADDING = 0.18;
+/**
+ * Slack around the outermost hexes, in board units. The bounds already include
+ * a full hex radius, so this only has to clear the selection ring's stroke —
+ * and on a 320px phone every 0.1 units of it costs about 2px of hex width.
+ */
+const VIEW_PADDING = 0.06;
 
 export type CellDescriber = (index: number, state: CellState, target: 'clone' | 'jump' | null) => string;
 

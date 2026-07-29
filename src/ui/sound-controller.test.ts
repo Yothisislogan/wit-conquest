@@ -631,3 +631,89 @@ describe('SoundController with a synthetic Web Audio implementation', () => {
     sound.dispose();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Suite 3 — hostile global accessors
+//
+// Anti-fingerprinting extensions and hardened browsers (Brave farbling, privacy
+// add-ons) do not merely delete the Web Audio globals: they replace them with
+// accessors that throw on *read*. Every entry point must still degrade to
+// silence, because the file's contract is that nothing here throws into
+// gameplay.
+// ---------------------------------------------------------------------------
+
+describe('SoundController with a hostile Web Audio global', () => {
+  afterEach(removeWebAudio);
+
+  /** Installs a getter that throws on read and counts how often it is probed. */
+  function poison(key: 'AudioContext' | 'webkitAudioContext'): () => number {
+    let reads = 0;
+    Object.defineProperty(globalThis, key, {
+      // Configurable so `removeWebAudio` can still delete it between tests.
+      configurable: true,
+      get(): never {
+        reads++;
+        throw new Error('SecurityError: audio fingerprinting blocked');
+      },
+    });
+    return () => reads;
+  }
+
+  it('stays silent when reading AudioContext throws', () => {
+    removeWebAudio();
+    poison('AudioContext');
+
+    const sound = new SoundController({ enabled: true, volume: 1 });
+    for (const name of ALL_SOUNDS) {
+      expect(() => sound.play(name), `${name} escaped as a throw`).not.toThrow();
+    }
+    expect(() => sound.playConversion(4)).not.toThrow();
+    expect(() => sound.setVolume(0.3)).not.toThrow();
+    expect(() => sound.setEnabled(false)).not.toThrow();
+    expect(() => sound.setEnabled(true)).not.toThrow();
+    expect(() => sound.dispose()).not.toThrow();
+  });
+
+  it('stays silent when reading webkitAudioContext throws', () => {
+    removeWebAudio();
+    poison('webkitAudioContext');
+
+    const sound = new SoundController({ enabled: true, volume: 1 });
+    expect(() => sound.play('win')).not.toThrow();
+    sound.dispose();
+  });
+
+  it('resolves unlock() instead of rejecting on a hostile getter', async () => {
+    removeWebAudio();
+    poison('AudioContext');
+
+    const sound = new SoundController({ enabled: true, volume: 1 });
+    await expect(sound.unlock()).resolves.toBeUndefined();
+    await expect(sound.unlock()).resolves.toBeUndefined();
+    sound.dispose();
+  });
+
+  it('latches the failure instead of re-probing the hostile global per cue', () => {
+    removeWebAudio();
+    const reads = poison('AudioContext');
+
+    const sound = new SoundController({ enabled: true, volume: 1 });
+    for (let i = 0; i < 20; i++) sound.play('select');
+    // One probe decides the environment is unsupported; the rest are free.
+    expect(reads()).toBe(1);
+    sound.dispose();
+  });
+
+  it('still finds the prefixed fallback when only AudioContext is poisoned', () => {
+    removeWebAudio();
+    poison('AudioContext');
+    FakeAudioContext.instances = [];
+    scope.webkitAudioContext = FakeAudioContext;
+
+    const sound = new SoundController({ enabled: true, volume: 1 });
+    sound.play('select');
+    expect(FakeAudioContext.instances).toHaveLength(1);
+    expect(latestContext().sources.length).toBeGreaterThan(0);
+    sound.dispose();
+  });
+});

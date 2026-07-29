@@ -10,7 +10,11 @@
 export interface SwRegistrationHandle {
   /** Asks the browser to re-fetch `sw.js`; cheap enough to call on demand. */
   checkForUpdate(): void;
-  /** Activates the waiting worker and reloads the page exactly once. */
+  /**
+   * Activates the waiting worker and reloads the page exactly once. If another
+   * tab already activated the same update there is nothing left to wake, so
+   * this reloads straight into the new build instead.
+   */
   applyUpdate(): void;
 }
 
@@ -21,6 +25,15 @@ export interface RegisterServiceWorkerOptions {
    */
   onUpdateReady?: () => void;
 }
+
+/**
+ * How long `applyUpdate()` waits for the `controllerchange` that normally
+ * follows `SKIP_WAITING` before reloading anyway. Activation can fail outright
+ * (a throwing `activate` handler leaves the new worker redundant), and by then
+ * the toast is already dismissed — a slightly early reload is far better than a
+ * button that silently did nothing.
+ */
+const ACTIVATION_TIMEOUT_MS = 5000;
 
 function supportsServiceWorker(): boolean {
   return (
@@ -56,6 +69,13 @@ export function registerServiceWorker(
   let updateRequested = false;
   let reloading = false;
 
+  /** Every reload path funnels through here so the page can only reload once. */
+  const reloadOnce = (): void => {
+    if (reloading) return;
+    reloading = true;
+    window.location.reload();
+  };
+
   const announceWaiting = (worker: ServiceWorker | null): void => {
     // Without an existing controller this is the very first install, not an
     // update: there is nothing for the player to accept.
@@ -75,11 +95,16 @@ export function registerServiceWorker(
   container.addEventListener('controllerchange', () => {
     // Only a player-initiated update may reload. A controller change we did not
     // ask for (another tab accepting the update, or the initial `clients.claim()`)
-    // must not yank the page away mid-turn, and the `reloading` latch stops the
-    // reload from re-entering if the event fires more than once.
-    if (!updateRequested || reloading) return;
-    reloading = true;
-    window.location.reload();
+    // must not yank the page away mid-turn.
+    //
+    // The request is single-shot: consuming it here is what stops one accepted
+    // update from arming *every* later controller change, which would let a
+    // future update accepted in another tab reload this page mid-match — the
+    // exact interruption this whole module exists to prevent.
+    const requested = updateRequested;
+    updateRequested = false;
+    if (!requested) return;
+    reloadOnce();
   });
 
   container
@@ -106,10 +131,33 @@ export function registerServiceWorker(
       });
     },
     applyUpdate(): void {
-      const worker = waitingWorker ?? registration?.waiting ?? null;
-      if (!worker) return;
+      // `registration.waiting` is the live truth; the worker we announced from
+      // is the fallback for the window before the property settles. Only a
+      // worker still in `installed` can be woken — anything else has already
+      // moved on and would swallow the message.
+      const waiting = [registration?.waiting ?? null, waitingWorker].find(
+        (candidate): candidate is ServiceWorker => candidate?.state === 'installed',
+      );
+
+      if (!waiting) {
+        // Another tab accepted this same update: the new worker is already
+        // active, and its `activate` handler has deleted the versioned cache
+        // holding *this* document's hashed chunks — which the new deploy no
+        // longer serves either. Posting SKIP_WAITING to that worker does
+        // nothing and no `controllerchange` would ever follow, stranding the
+        // player on a build that breaks at the next lazy import with the toast
+        // already dismissed. Adopting the update by reloading is exactly what
+        // they asked for. Gated on `notified` so a call with nothing pending
+        // stays the no-op it always was.
+        if (notified) reloadOnce();
+        return;
+      }
+
       updateRequested = true;
-      worker.postMessage({ type: 'SKIP_WAITING' });
+      waiting.postMessage({ type: 'SKIP_WAITING' });
+      // `controllerchange` is the normal way this ends; the timer is only the
+      // backstop for an activation that never completes.
+      setTimeout(reloadOnce, ACTIVATION_TIMEOUT_MS);
     },
   };
 }

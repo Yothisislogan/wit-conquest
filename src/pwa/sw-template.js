@@ -2,11 +2,13 @@
  * Monster Territory service worker — build template.
  *
  * This file is never shipped as-is: the `monster-territory-sw` plugin in
- * vite.config.ts reads it at build time and substitutes two literal tokens,
- * `__PRECACHE_MANIFEST__` and `__CACHE_VERSION__`, before emitting `sw.js`
- * next to `index.html`. Both tokens are therefore referenced exactly once and
- * only ever in value position, so the un-substituted template still parses as
- * valid JavaScript (`node --check` and the unit test rely on that).
+ * vite.config.ts reads it at build time and substitutes the two placeholder
+ * tokens declared immediately below before emitting `sw.js` next to
+ * `index.html`. The plugin uses `String.prototype.replace` with a string
+ * pattern, which only rewrites the *first* occurrence — so each token appears
+ * exactly once in this file (not even in a comment) and only ever in value
+ * position, which also keeps the un-substituted template parseable by
+ * `node --check` and by the editor. sw-template.test.ts enforces all of that.
  *
  * Written in plain JS rather than TypeScript because it is copied verbatim into
  * the bundle without passing through the TS/Rollup pipeline.
@@ -32,6 +34,17 @@ const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
 function resolvePath(path) {
   return new URL(path, self.registration.scope).toString();
 }
+
+/**
+ * `ignoreVary` matters more than it looks. A precache entry is fetched by the
+ * worker itself, which sends no `Origin` header, while the page later requests
+ * the same file as a CORS-mode module script, which does. Any server that
+ * answers static assets with `Vary: Origin` — Vite's own preview server among
+ * them — would therefore make every precached chunk a cache *miss*, and the
+ * game would be offline-capable in name only. The filenames are content
+ * hashed, so the bytes cannot disagree with the request headers anyway.
+ */
+const MATCH_OPTIONS = { ignoreVary: true };
 
 /** The document served for any navigation we cannot fetch from the network. */
 function shellUrl() {
@@ -153,9 +166,9 @@ async function handleNavigation(request) {
     return response;
   } catch (error) {
     const fallback =
-      (await cache.match(request, { ignoreSearch: true })) ||
-      (await cache.match(shellUrl())) ||
-      (await cache.match(resolvePath('./')));
+      (await cache.match(request, { ignoreSearch: true, ignoreVary: true })) ||
+      (await cache.match(shellUrl(), MATCH_OPTIONS)) ||
+      (await cache.match(resolvePath('./'), MATCH_OPTIONS));
     if (fallback) return fallback;
     throw error;
   }
@@ -170,7 +183,7 @@ async function handleNavigation(request) {
 async function handleAsset(event) {
   const request = event.request;
   const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match(request);
+  const cached = await cache.match(request, MATCH_OPTIONS);
 
   if (cached) {
     event.waitUntil(

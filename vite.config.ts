@@ -20,6 +20,11 @@ function pwaServiceWorker(): Plugin {
       // registration scope at runtime, so the app works from a sub-path too.
       const assets = new Set<string>(['./', 'index.html', 'manifest.webmanifest']);
       for (const file of Object.keys(bundle)) {
+        // Sourcemaps are devtools-only: the running app never requests one, yet
+        // they outweigh the real assets roughly 3:1. Precaching them would make
+        // every install download (and permanently store) ~400 KB of dead weight
+        // — on every deploy, because CACHE_VERSION changes each build.
+        if (file.endsWith('.map')) continue;
         // Web workers are fetched at runtime, everything else is linked from the
         // entry HTML; both need to be available offline.
         assets.add(file);

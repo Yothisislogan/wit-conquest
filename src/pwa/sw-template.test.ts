@@ -97,4 +97,25 @@ describe('sw-template behaviour contract', () => {
     expect(templateSource).toMatch(/request\.method\s*!==\s*'GET'/);
     expect(templateSource).toMatch(/url\.origin\s*!==\s*self\.location\.origin/);
   });
+
+  /**
+   * Regression guard. The worker precaches assets with its own fetch, which
+   * carries no `Origin` header, while the page requests the same files as
+   * CORS-mode module scripts, which do. A server that answers with
+   * `Vary: Origin` (Vite's preview server does) then turns every precache entry
+   * into a miss, and offline play silently stops working.
+   */
+  it('ignores Vary when reading precached assets', () => {
+    expect(templateSource).toContain('ignoreVary: true');
+
+    // Every cache read must opt in, not just the one that was reported.
+    const callSites = templateSource.split('cache.match(').slice(1);
+    expect(callSites.length).toBeGreaterThan(0);
+    for (const site of callSites) {
+      const args = site.slice(0, site.indexOf(';'));
+      expect(args, `cache.match(${args.trim()} must ignore Vary`).toMatch(
+        /MATCH_OPTIONS|ignoreVary:\s*true/,
+      );
+    }
+  });
 });

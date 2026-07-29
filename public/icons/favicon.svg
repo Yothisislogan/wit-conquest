@@ -1,38 +1,45 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Monster Territory">
   <title>Monster Territory</title>
   <defs>
-    <linearGradient id="tile" x1="10.24" y1="1.92" x2="53.76" y2="62.08" gradientUnits="userSpaceOnUse">
+    <linearGradient id="mt-tile" x1="10.24" y1="1.92" x2="53.76" y2="62.08" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#241a5e"/>
       <stop offset="0.55" stop-color="#5b3fc4"/>
       <stop offset="1" stop-color="#8a63f5"/>
     </linearGradient>
-    <linearGradient id="skin" x1="0" y1="24.96" x2="0" y2="49.28" gradientUnits="userSpaceOnUse">
+    <linearGradient id="mt-sheen" x1="0" y1="3.84" x2="0" y2="29.44" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.15"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.038"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="mt-skin" x1="0" y1="24.96" x2="0" y2="49.28" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#ffd071"/>
       <stop offset="1" stop-color="#ef8f2c"/>
     </linearGradient>
-    <radialGradient id="halo" cx="32" cy="35.52" r="26.88" gradientUnits="userSpaceOnUse">
+    <radialGradient id="mt-halo" cx="32" cy="35.52" r="26.88" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#a58bff" stop-opacity="0.22"/>
       <stop offset="1" stop-color="#a58bff" stop-opacity="0"/>
     </radialGradient>
-    <path id="tile-shape" d="M 29.6 1.386 A 4.8 4.8 0 0 1 34.4 1.386 L 57.313 14.614 A 4.8 4.8 0 0 1 59.713 18.771 L 59.713 45.229 A 4.8 4.8 0 0 1 57.313 49.386 L 34.4 62.614 A 4.8 4.8 0 0 1 29.6 62.614 L 6.687 49.386 A 4.8 4.8 0 0 1 4.287 45.229 L 4.287 18.771 A 4.8 4.8 0 0 1 6.687 14.614 Z"/>
-    <clipPath id="tile-clip"><use href="#tile-shape"/></clipPath>
+    <clipPath id="mt-clip"><path d="M 29.6 1.386 A 4.8 4.8 0 0 1 34.4 1.386 L 57.313 14.614 A 4.8 4.8 0 0 1 59.713 18.771 L 59.713 45.229 A 4.8 4.8 0 0 1 57.313 49.386 L 34.4 62.614 A 4.8 4.8 0 0 1 29.6 62.614 L 6.687 49.386 A 4.8 4.8 0 0 1 4.287 45.229 L 4.287 18.771 A 4.8 4.8 0 0 1 6.687 14.614 Z"/></clipPath>
   </defs>
 
-  <use href="#tile-shape" fill="url(#tile)"/>
-  <g clip-path="url(#tile-clip)">
-    <rect x="0" y="0" width="64" height="64" fill="url(#halo)"/>
+  <path d="M 29.6 1.386 A 4.8 4.8 0 0 1 34.4 1.386 L 57.313 14.614 A 4.8 4.8 0 0 1 59.713 18.771 L 59.713 45.229 A 4.8 4.8 0 0 1 57.313 49.386 L 34.4 62.614 A 4.8 4.8 0 0 1 29.6 62.614 L 6.687 49.386 A 4.8 4.8 0 0 1 4.287 45.229 L 4.287 18.771 A 4.8 4.8 0 0 1 6.687 14.614 Z" fill="url(#mt-tile)"/>
+  <g clip-path="url(#mt-clip)">
+    <rect x="0" y="0" width="64" height="64" fill="url(#mt-sheen)"/>
+    <rect x="0" y="0" width="64" height="64" fill="url(#mt-halo)"/>
     <ellipse cx="32" cy="50.176" rx="10.752" ry="2.048" fill="#0d0920" opacity="0.42"/>
-    <g stroke="url(#skin)" stroke-linecap="round" stroke-width="2.688">
+    <g stroke="url(#mt-skin)" stroke-linecap="round" stroke-width="2.688">
       <line x1="27.648" y1="28.16" x2="23.808" y2="20.352"/>
       <line x1="36.352" y1="28.16" x2="40.192" y2="20.352"/>
     </g>
-    <circle cx="23.808" cy="20.352" r="2.752" fill="url(#skin)"/>
-    <circle cx="40.192" cy="20.352" r="2.752" fill="url(#skin)"/>
-    <path d="M 18.88 38.72 L 18.88 35.52 A 10.56 10.56 0 0 1 29.44 24.96 L 34.56 24.96 A 10.56 10.56 0 0 1 45.12 35.52 L 45.12 49.216 C 42.933 49.216 40.747 46.528 38.56 46.528 C 36.373 46.528 34.187 49.216 32 49.216 C 29.813 49.216 27.627 46.528 25.44 46.528 C 23.253 46.528 21.067 49.216 18.88 49.216 Z" fill="url(#skin)"/>
+    <circle cx="23.808" cy="20.352" r="2.752" fill="url(#mt-skin)"/>
+    <circle cx="40.192" cy="20.352" r="2.752" fill="url(#mt-skin)"/>
+    <path d="M 18.88 38.72 L 18.88 35.52 A 10.56 10.56 0 0 1 29.44 24.96 L 34.56 24.96 A 10.56 10.56 0 0 1 45.12 35.52 L 45.12 49.216 C 42.933 49.216 40.747 46.528 38.56 46.528 C 36.373 46.528 34.187 49.216 32 49.216 C 29.813 49.216 27.627 46.528 25.44 46.528 C 23.253 46.528 21.067 49.216 18.88 49.216 Z" fill="url(#mt-skin)"/>
     <path d="M 27.984 42.062 A 4.736 4.736 0 0 0 36.016 42.062" fill="none" stroke="#17102f" stroke-width="1.728" stroke-linecap="round"/>
     <circle cx="32" cy="34.368" r="6.272" fill="#fff6e4"/>
     <circle cx="32" cy="35.072" r="3.008" fill="#17102f"/>
     <circle cx="29.856" cy="32.736" r="1.376" fill="#ffffff" opacity="0.92"/>
+    <!-- Stroked at double width and clipped, so the rim sits wholly inside the
+         tile exactly as it does in the rasterised icons. -->
+    <path d="M 29.6 1.386 A 4.8 4.8 0 0 1 34.4 1.386 L 57.313 14.614 A 4.8 4.8 0 0 1 59.713 18.771 L 59.713 45.229 A 4.8 4.8 0 0 1 57.313 49.386 L 34.4 62.614 A 4.8 4.8 0 0 1 29.6 62.614 L 6.687 49.386 A 4.8 4.8 0 0 1 4.287 45.229 L 4.287 18.771 A 4.8 4.8 0 0 1 6.687 14.614 Z" fill="none" stroke="#c3b0ff" stroke-opacity="0.4" stroke-width="2.176"/>
   </g>
-  <use href="#tile-shape" fill="none" stroke="#c3b0ff" stroke-opacity="0.4" stroke-width="1.088"/>
 </svg>
