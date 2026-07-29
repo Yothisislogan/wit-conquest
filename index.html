@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover lets the layout reach under notches; pinch zoom is
+         deliberately left enabled because disabling it breaks accessibility. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#140f2b" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f4f1ff" media="(prefers-color-scheme: light)" />
+    <meta
+      name="description"
+      content="Monster Territory - a fast hexagonal territory strategy game for phones, tablets and desktop. Clone, jump and convert your way to the biggest patch of the board."
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Monsters" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png" />
+    <title>Monster Territory</title>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <!-- ================= MENU ================= -->
+      <section class="screen screen--menu" id="screen-menu" data-screen="menu">
+        <div class="screen__inner menu">
+          <header class="menu__masthead">
+            <div class="menu__crest" id="menu-crest" aria-hidden="true"></div>
+            <h1 class="menu__title">Monster<span>Territory</span></h1>
+            <p class="menu__tagline">Clone. Jump. Claim the board.</p>
+          </header>
+
+          <div class="menu__actions">
+            <button class="btn btn--primary btn--jumbo" id="btn-play" type="button">
+              Play Game
+            </button>
+            <button class="btn btn--ghost" id="btn-resume" type="button" hidden>
+              Resume match
+            </button>
+          </div>
+
+          <div class="menu__setup">
+            <fieldset class="option" id="option-mode">
+              <legend class="option__label">Game mode</legend>
+              <div class="segmented" role="radiogroup" aria-label="Game mode">
+                <button
+                  class="segmented__item"
+                  type="button"
+                  role="radio"
+                  aria-checked="true"
+                  data-value="vs-computer"
+                >
+                  <span class="segmented__title">Vs Computer</span>
+                </button>
+                <button
+                  class="segmented__item"
+                  type="button"
+                  role="radio"
+                  aria-checked="false"
+                  data-value="local-two-player"
+                >
+                  <span class="segmented__title">2 Players</span>
+                </button>
+              </div>
+            </fieldset>
+
+            <fieldset class="option" id="option-difficulty">
+              <legend class="option__label">Difficulty</legend>
+              <div class="segmented" role="radiogroup" aria-label="Computer difficulty">
+                <button class="segmented__item" type="button" role="radio" aria-checked="false" data-value="easy">
+                  <span class="segmented__title">Easy</span>
+                </button>
+                <button class="segmented__item" type="button" role="radio" aria-checked="true" data-value="normal">
+                  <span class="segmented__title">Normal</span>
+                </button>
+                <button class="segmented__item" type="button" role="radio" aria-checked="false" data-value="hard">
+                  <span class="segmented__title">Hard</span>
+                </button>
+              </div>
+            </fieldset>
+
+            <fieldset class="option option--boards" id="option-board">
+              <legend class="option__label">Board</legend>
+              <div class="board-picker" role="radiogroup" aria-label="Board layout" id="board-picker"></div>
+              <p class="option__hint" id="board-hint"></p>
+            </fieldset>
+          </div>
+
+          <nav class="menu__links" aria-label="More">
+            <button class="btn btn--tile" id="btn-howto" type="button">
+              <span class="btn__icon" aria-hidden="true">?</span>
+              How to play
+            </button>
+            <button class="btn btn--tile" id="btn-tutorial" type="button">
+              <span class="btn__icon" aria-hidden="true">&#9654;</span>
+              Tutorial
+            </button>
+            <button class="btn btn--tile" id="btn-settings" type="button">
+              <span class="btn__icon" aria-hidden="true">&#9881;</span>
+              Settings
+            </button>
+            <button
+              class="btn btn--tile"
+              id="btn-sound-menu"
+              type="button"
+              aria-pressed="false"
+            >
+              <span class="btn__icon" aria-hidden="true" data-sound-icon>&#128263;</span>
+              <span data-sound-label>Sound off</span>
+            </button>
+          </nav>
+
+          <p class="menu__stats" id="menu-stats"></p>
+        </div>
+      </section>
+
+      <!-- ================= GAME ================= -->
+      <section class="screen screen--game" id="screen-game" data-screen="game" hidden>
+        <header class="statusbar" id="statusbar">
+          <div class="statusbar__side statusbar__side--p1" id="score-p1" data-player="1">
+            <span class="scorechip__art" aria-hidden="true" data-monster="1"></span>
+            <span class="scorechip__text">
+              <span class="scorechip__name" data-name>Blobs</span>
+              <span class="scorechip__score" data-score>3</span>
+            </span>
+          </div>
+
+          <div class="statusbar__center">
+            <p class="turnpill" id="turnpill">
+              <span class="turnpill__dot" aria-hidden="true"></span>
+              <span id="turnpill-text">Your turn</span>
+            </p>
+            <p class="thinking" id="thinking" hidden>
+              <span class="thinking__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              Thinking&hellip;
+            </p>
+          </div>
+
+          <div class="statusbar__side statusbar__side--p2" id="score-p2" data-player="2">
+            <span class="scorechip__text">
+              <span class="scorechip__name" data-name>Spikes</span>
+              <span class="scorechip__score" data-score>3</span>
+            </span>
+            <span class="scorechip__art" aria-hidden="true" data-monster="2"></span>
+          </div>
+        </header>
+
+        <main class="boardarea" id="boardarea">
+          <div class="boardarea__frame" id="board-host"></div>
+        </main>
+
+        <aside class="sidepanel" id="sidepanel" aria-label="Match details">
+          <h2 class="sidepanel__heading">Match</h2>
+          <dl class="sidepanel__stats">
+            <div><dt>Board</dt><dd id="panel-board">Classic</dd></div>
+            <div><dt>Mode</dt><dd id="panel-mode">Vs Computer</dd></div>
+            <div><dt>Turn</dt><dd id="panel-turn">1</dd></div>
+            <div><dt>Empty spaces</dt><dd id="panel-empty">55</dd></div>
+          </dl>
+          <h2 class="sidepanel__heading">Recent moves</h2>
+          <ol class="movelog" id="movelog" aria-live="off"></ol>
+        </aside>
+
+        <p class="hintbar" id="hintbar">Tap one of your monsters to begin.</p>
+
+        <nav class="controls" aria-label="Match controls">
+          <button class="btn btn--control" id="btn-pause" type="button">
+            <span class="btn__icon" aria-hidden="true">&#9776;</span><span class="btn__text">Menu</span>
+          </button>
+          <button class="btn btn--control" id="btn-undo" type="button" disabled>
+            <span class="btn__icon" aria-hidden="true">&#8630;</span><span class="btn__text">Undo</span>
+          </button>
+          <button class="btn btn--control" id="btn-restart" type="button">
+            <span class="btn__icon" aria-hidden="true">&#8635;</span><span class="btn__text">Restart</span>
+          </button>
+          <button class="btn btn--control" id="btn-sound-game" type="button" aria-pressed="false">
+            <span class="btn__icon" aria-hidden="true" data-sound-icon>&#128263;</span
+            ><span class="btn__text" data-sound-label>Sound</span>
+          </button>
+        </nav>
+      </section>
+
+      <!-- ================= TUTORIAL ================= -->
+      <section class="screen screen--game screen--tutorial" id="screen-tutorial" data-screen="tutorial" hidden>
+        <header class="statusbar statusbar--tutorial">
+          <h2 class="tutorial__step" id="tutorial-step">Step 1 of 5</h2>
+          <button class="btn btn--ghost btn--small" id="btn-tutorial-skip" type="button">Skip</button>
+        </header>
+        <main class="boardarea">
+          <div class="boardarea__frame" id="tutorial-host"></div>
+        </main>
+        <p class="hintbar hintbar--tall" id="tutorial-hint"></p>
+        <nav class="controls">
+          <button class="btn btn--control" id="btn-tutorial-back" type="button">Back</button>
+          <button class="btn btn--primary btn--control" id="btn-tutorial-next" type="button">Next</button>
+        </nav>
+      </section>
+
+      <!-- ================= HOW TO PLAY ================= -->
+      <section class="screen screen--sheet" id="screen-howto" data-screen="howto" hidden>
+        <div class="screen__inner doc">
+          <header class="doc__head">
+            <h2>How to play</h2>
+            <button class="btn btn--ghost btn--small" data-close-screen type="button">Close</button>
+          </header>
+
+          <ol class="steps">
+            <li>
+              <h3>Pick a monster</h3>
+              <p>Tap one of your monsters. Every space you can move to lights up straight away.</p>
+            </li>
+            <li>
+              <h3>Clone to a neighbour</h3>
+              <p>
+                Tap a space touching your monster. Your monster stays put and a copy appears in the new
+                space. Cloning is how you grow.
+              </p>
+              <p class="steps__marker"><span class="legend-swatch legend-swatch--clone" aria-hidden="true"></span> Clone spaces show a solid dot.</p>
+            </li>
+            <li>
+              <h3>Jump two spaces</h3>
+              <p>
+                Tap a space exactly two steps away. Your monster leaps there and the space it left
+                becomes empty. Jumping covers ground but costs you nothing on the board.
+              </p>
+              <p class="steps__marker"><span class="legend-swatch legend-swatch--jump" aria-hidden="true"></span> Jump spaces show a hollow ring.</p>
+            </li>
+            <li>
+              <h3>Land next to enemies</h3>
+              <p>Every enemy monster touching the space you land on switches to your team instantly.</p>
+            </li>
+            <li>
+              <h3>Claim the most spaces</h3>
+              <p>
+                When nobody can move, whoever holds the most spaces wins. A player with no legal move is
+                skipped; the other keeps going.
+              </p>
+            </li>
+          </ol>
+
+          <h3 class="doc__subhead">Controls</h3>
+          <ul class="bullets">
+            <li>Tap your monster again to cancel the selection.</li>
+            <li>Tap a different monster to switch selection.</li>
+            <li>Taps on spaces you cannot reach are ignored &mdash; they never cost you a turn.</li>
+            <li>
+              On a keyboard: arrow keys move focus, <kbd>Enter</kbd> or <kbd>Space</kbd> selects,
+              <kbd>Esc</kbd> cancels, <kbd>R</kbd> restarts (with confirmation).
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ================= SETTINGS ================= -->
+      <section class="screen screen--sheet" id="screen-settings" data-screen="settings" hidden>
+        <div class="screen__inner doc">
+          <header class="doc__head">
+            <h2>Settings</h2>
+            <button class="btn btn--ghost btn--small" data-close-screen type="button">Close</button>
+          </header>
+
+          <div class="settings">
+            <div class="setting">
+              <label class="setting__label" for="set-sound">Sound effects</label>
+              <button class="switch" id="set-sound" type="button" role="switch" aria-checked="false">
+                <span class="switch__track" aria-hidden="true"><span class="switch__thumb"></span></span>
+              </button>
+            </div>
+
+            <div class="setting">
+              <label class="setting__label" for="set-music">Ambient music</label>
+              <button class="switch" id="set-music" type="button" role="switch" aria-checked="false">
+                <span class="switch__track" aria-hidden="true"><span class="switch__thumb"></span></span>
+              </button>
+            </div>
+
+            <div class="setting setting--stacked">
+              <label class="setting__label" for="set-volume">Volume</label>
+              <input class="slider" id="set-volume" type="range" min="0" max="100" step="5" value="70" />
+            </div>
+
+            <div class="setting setting--stacked">
+              <span class="setting__label" id="label-motion">Animation</span>
+              <div class="segmented segmented--compact" role="radiogroup" aria-labelledby="label-motion" id="set-motion">
+                <button class="segmented__item" type="button" role="radio" aria-checked="true" data-value="auto">System</button>
+                <button class="segmented__item" type="button" role="radio" aria-checked="false" data-value="full">Full</button>
+                <button class="segmented__item" type="button" role="radio" aria-checked="false" data-value="reduced">Reduced</button>
+              </div>
+              <p class="setting__hint">Reduced animation removes movement and shortens every transition.</p>
+            </div>
+
+            <div class="setting setting--stacked">
+              <span class="setting__label" id="label-contrast">Contrast</span>
+              <div class="segmented segmented--compact" role="radiogroup" aria-labelledby="label-contrast" id="set-contrast">
+                <button class="segmented__item" type="button" role="radio" aria-checked="true" data-value="auto">Standard</button>
+                <button class="segmented__item" type="button" role="radio" aria-checked="false" data-value="high">High</button>
+              </div>
+            </div>
+
+            <div class="setting">
+              <label class="setting__label" for="set-coords">Show space labels</label>
+              <button class="switch" id="set-coords" type="button" role="switch" aria-checked="false">
+                <span class="switch__track" aria-hidden="true"><span class="switch__thumb"></span></span>
+              </button>
+            </div>
+
+            <div class="setting">
+              <label class="setting__label" for="set-undo">
+                Undo in 2-player mode
+                <span class="setting__hint">Off by default to avoid table-side disputes.</span>
+              </label>
+              <button class="switch" id="set-undo" type="button" role="switch" aria-checked="false">
+                <span class="switch__track" aria-hidden="true"><span class="switch__thumb"></span></span>
+              </button>
+            </div>
+          </div>
+
+          <h3 class="doc__subhead">Your record</h3>
+          <dl class="statgrid" id="stat-grid"></dl>
+          <button class="btn btn--ghost btn--small" id="btn-reset-stats" type="button">Reset statistics</button>
+
+          <h3 class="doc__subhead">About</h3>
+          <p class="fineprint">
+            Monster Territory is an original game. All artwork is drawn as vectors in this codebase, every
+            sound is generated by the browser at runtime, and all board layouts were designed for this
+            project. No third-party game assets are used.
+          </p>
+        </div>
+      </section>
+
+      <!-- ================= PAUSE ================= -->
+      <div class="overlay" id="overlay-pause" hidden>
+        <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="pause-title" id="pause-dialog">
+          <h2 class="sheet__title" id="pause-title">Paused</h2>
+          <div class="sheet__actions">
+            <button class="btn btn--primary" id="btn-pause-resume" type="button">Resume match</button>
+            <button class="btn" id="btn-pause-restart" type="button">Restart match</button>
+            <button class="btn" id="btn-pause-settings" type="button">Settings</button>
+            <button class="btn btn--ghost" id="btn-pause-menu" type="button">Main menu</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= CONFIRM ================= -->
+      <div class="overlay" id="overlay-confirm" hidden>
+        <div class="sheet sheet--narrow" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-body" id="confirm-dialog">
+          <h2 class="sheet__title" id="confirm-title">Restart match?</h2>
+          <p class="sheet__body" id="confirm-body">The current board will be lost.</p>
+          <div class="sheet__actions sheet__actions--row">
+            <button class="btn btn--ghost" id="btn-confirm-cancel" type="button">Cancel</button>
+            <button class="btn btn--primary" id="btn-confirm-ok" type="button">Restart</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= RESULT ================= -->
+      <div class="overlay overlay--result" id="overlay-result" hidden>
+        <div class="sheet sheet--result" role="dialog" aria-modal="true" aria-labelledby="result-title" id="result-dialog">
+          <p class="result__label" id="result-label">Total takeover</p>
+          <h2 class="sheet__title" id="result-title">Blobs win</h2>
+          <div class="result__scores" id="result-scores"></div>
+          <dl class="result__stats" id="result-stats"></dl>
+          <div class="sheet__actions">
+            <button class="btn btn--primary" id="btn-result-again" type="button">Play again</button>
+            <button class="btn" id="btn-result-board" type="button">Change board</button>
+            <button class="btn btn--ghost" id="btn-result-menu" type="button">Main menu</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Shown briefly before the result sheet so the final board is visible. -->
+      <button class="peek" id="result-peek" type="button" hidden>
+        <span>Match over &mdash; tap for the result</span>
+      </button>
+
+      <!-- Update prompt for a new service worker version -->
+      <div class="toast" id="update-toast" hidden>
+        <span>A new version is ready.</span>
+        <button class="btn btn--small btn--primary" id="btn-update" type="button">Reload</button>
+      </div>
+    </div>
+
+    <!-- Screen reader announcements -->
+    <div class="sr-only" id="live-polite" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div class="sr-only" id="live-assertive" role="alert" aria-live="assertive" aria-atomic="true"></div>
+
+    <noscript>
+      <p style="padding: 2rem; font: 1rem/1.5 system-ui, sans-serif">
+        Monster Territory needs JavaScript to run. Please enable it and reload.
+      </p>
+    </noscript>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

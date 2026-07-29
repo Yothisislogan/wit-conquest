@@ -92,6 +92,28 @@ export const BOARD_DEFINITIONS: readonly BoardDefinition[] = Object.freeze([
 
 export const DEFAULT_BOARD_ID = 'classic';
 
+/**
+ * A deliberately tiny board used only by the tutorial. It is kept out of
+ * `BOARD_DEFINITIONS` so it never appears in the picker and is never subject to
+ * the 45-65 space balance rules that apply to real layouts.
+ */
+const TUTORIAL: BoardDefinition = {
+  id: 'tutorial',
+  name: 'Training ground',
+  description: 'A small board used by the tutorial.',
+  strategy: 'Nineteen spaces, no obstacles — just enough room to learn the two moves.',
+  radius: 2,
+  blocked: [],
+  starts: [],
+};
+
+let tutorialBoard: BoardGeometry | null = null;
+
+export function getTutorialBoard(): BoardGeometry {
+  tutorialBoard ??= compileBoard(TUTORIAL);
+  return tutorialBoard;
+}
+
 const compiled = new Map<string, BoardGeometry>();
 
 /** Compiles (and memoises) a board layout by id. */

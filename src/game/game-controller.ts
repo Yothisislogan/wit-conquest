@@ -63,6 +63,12 @@ const EMPTY_TARGETS: MoveTargets = { clone: [], jump: [] };
 /** How long the board is left alone after a move before the opponent replies. */
 export interface Pacing {
   moveSettleMs: number;
+  /**
+   * Floor on how long the opponent appears to think. A move that lands
+   * instantly reads as a glitch, so a fast search is padded out to this — but
+   * players who asked for reduced motion, and tests, can turn it off.
+   */
+  minThinkingMs: number;
 }
 
 export class GameController {
@@ -75,7 +81,7 @@ export class GameController {
   #aiToken = 0;
   #history: GameState[] = [];
   #undoAvailable = false;
-  #pacing: Pacing = { moveSettleMs: 280 };
+  #pacing: Pacing = { moveSettleMs: 280, minThinkingMs: MIN_THINKING_MS };
   #startedAt = 0;
   #largestConversion = 0;
   #peakDeficit = { 1: 0, 2: 0 } as Record<PlayerId, number>;
@@ -400,7 +406,7 @@ export class GameController {
 
       // Guarantee a beat of visible thinking so turns never feel like a glitch.
       const elapsed = Date.now() - startedAt;
-      const wait = Math.max(0, MIN_THINKING_MS - elapsed);
+      const wait = Math.max(0, this.#pacing.minThinkingMs - elapsed);
       this.#defer(() => {
         if (token !== this.#aiToken) return;
         this.#setThinking(false);
