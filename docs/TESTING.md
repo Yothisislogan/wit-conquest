@@ -7,7 +7,7 @@ npm run test:e2e    # Playwright
 npm run test:all    # all three
 ```
 
-Both suites are green at the time of writing: **201 unit tests** and **238
+Both suites are green at the time of writing: **209 unit tests** and **242
 end-to-end tests** across four viewport profiles.
 
 ## Unit tests (Vitest)
@@ -26,7 +26,7 @@ the `*.dom.test.ts` suffix and run under jsdom.
 | `game/game-controller.dom.test.ts` | Selection, mis-tap handling, undo policy, AI turn scheduling, persistence and resume                       |
 | `ai/ai.test.ts`                  | Legality across full playouts on all layouts and difficulties, time budgets, determinism, strength ordering  |
 | `ui/sound-controller.test.ts`    | Every method is a safe no-op with no Web Audio, hostile stubs, rate limiting, volume clamping                |
-| `ui/music-controller.test.ts`    | Scene changes and cross-fades, scheduler lifecycle, node-leak bounds, determinism, safe no-ops with no Web Audio |
+| `ui/music-controller.test.ts`    | Scene changes and cross-fades, scheduler lifecycle, node-leak bounds, determinism, hostile graphs, safe no-ops with no Web Audio |
 | `pwa/*.test.ts`                  | Service-worker template contract, precache manifest, registration behaviour                                  |
 
 Two of these are property-style rather than example-based: `rules.test.ts` plays

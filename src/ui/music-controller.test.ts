@@ -1,7 +1,7 @@
 /**
  * Unit tests for the procedural music engine.
  *
- * Three suites:
+ * Four suites:
  *  1. No Web Audio at all — the environment vitest actually runs in. Every
  *     entry point must be a silent no-op, and nothing may be scheduled: a
  *     leaked interval in Node would keep the test process (and a server-side
@@ -10,8 +10,13 @@
  *     advances by hand. It cannot tell us whether the music sounds good, but it
  *     does pin down the things that make it *work*: lookahead scheduling
  *     against the audio clock, cross-fades instead of cuts, deterministic note
- *     choice, and a graph that does not grow without bound.
- *  3. Hostile graphs — a bus supplier that throws, a context that refuses to
+ *     choice, a bed that stays under the cues, and a graph that does not grow
+ *     without bound. Several of those are questions about *level over time*
+ *     rather than about which nodes exist, so the fake records automation
+ *     events and `valueAt` replays them.
+ *  3. The real SoundController underneath, because the two engines share a
+ *     context and the settings panel exposes them as independent sliders.
+ *  4. Hostile graphs — a bus supplier that throws, a context that refuses to
  *     resume, a node factory that fails mid-session.
  */
 
@@ -21,8 +26,14 @@ import { SoundController } from './sound-controller.ts';
 
 const ALL_SCENES: MusicScene[] = ['menu', 'match', 'victory', 'defeat'];
 
-/** Peak of the bed on the shared bus, mirroring `BED_PEAK` in the engine. */
-const BED_PEAK = 0.15;
+/** Peak of the bed before the volume trim, mirroring `BED_PEAK` in the engine. */
+const BED_PEAK = 0.08;
+/**
+ * Where the sound engine's shared compressor starts working (-18 dBFS). The bed
+ * must stay under it even at maximum: above it the music drives the limiter
+ * continuously and ducks every cue it is supposed to sit beneath.
+ */
+const LIMITER_THRESHOLD = 0.126;
 
 // ---------------------------------------------------------------------------
 // Suite 1 — no Web Audio available
@@ -267,9 +278,16 @@ class FakeParam {
 
 class FakeNode {
   readonly connections: FakeNode[] = [];
+  /**
+   * Everything this node was ever wired to. `disconnect()` deliberately does
+   * not clear it, so a voice that has already ended and been freed can still be
+   * traced back to its envelope when measuring the mix after the fact.
+   */
+  readonly wiring: FakeNode[] = [];
 
   connect(destination: FakeNode): FakeNode {
     this.connections.push(destination);
+    this.wiring.push(destination);
     return destination;
   }
 
@@ -288,6 +306,15 @@ class FakeBiquad extends FakeNode {
   readonly Q = new FakeParam(1);
   readonly detune = new FakeParam(0);
   readonly gain = new FakeParam(0);
+}
+
+/** Only ever built by the *sound* engine; the music never asks for one. */
+class FakeCompressor extends FakeNode {
+  readonly threshold = new FakeParam(-24);
+  readonly knee = new FakeParam(30);
+  readonly ratio = new FakeParam(12);
+  readonly attack = new FakeParam(0.003);
+  readonly release = new FakeParam(0.25);
 }
 
 class FakeOscillator extends FakeNode {
@@ -343,6 +370,10 @@ class FakeAudioContext {
     return this.track(new FakeBiquad());
   }
 
+  createDynamicsCompressor(): FakeCompressor {
+    return this.track(new FakeCompressor());
+  }
+
   createOscillator(): FakeOscillator {
     const osc = this.track(new FakeOscillator(this));
     this.oscillators.push(osc);
@@ -352,6 +383,10 @@ class FakeAudioContext {
   async resume(): Promise<void> {
     this.resumeCalls++;
     this.state = 'running';
+  }
+
+  async close(): Promise<void> {
+    this.state = 'closed';
   }
 
   /** Advances the audio clock and ends every voice whose stop time has passed. */
@@ -425,6 +460,106 @@ function melody(ctx: FakeAudioContext): number[] {
   return ctx.oscillators.map((osc) => osc.frequency.events[0]?.value ?? 0);
 }
 
+/**
+ * Evaluates a recorded automation curve at `time`, the way Web Audio would.
+ *
+ * This is what makes it possible to test the *shape* of a fade rather than just
+ * its endpoints — and the shape is the whole question, because an exponential
+ * ramp and a linear one to the same target sound nothing alike in between.
+ */
+function valueAt(param: FakeParam, time: number): number {
+  const events = param.events;
+  if (events.length === 0) return param.value;
+  if (time <= events[0].time) return events[0].value;
+
+  let current = events[0].value;
+  let anchor = events[0].time;
+  for (let i = 1; i < events.length; i++) {
+    const event = events[i];
+    if (event.time <= time) {
+      current = event.value;
+      anchor = event.time;
+      continue;
+    }
+    const span = event.time - anchor;
+    const progress = span > 0 ? (time - anchor) / span : 1;
+    if (event.type === 'linear') return current + (event.value - current) * progress;
+    if (event.type === 'exponential' && current > 0 && event.value > 0) {
+      return current * Math.pow(event.value / current, progress);
+    }
+    // A `set` or a `cancel` ahead of us holds whatever we are already at.
+    return current;
+  }
+  return current;
+}
+
+/** The gain carrying a voice's envelope, reachable even after it was freed. */
+function envelopeOf(osc: FakeOscillator): FakeGain | null {
+  for (const first of osc.wiring) {
+    if (first instanceof FakeGain) return first;
+    const next = first.wiring.find((node): node is FakeGain => node instanceof FakeGain);
+    if (next) return next;
+  }
+  return null;
+}
+
+interface BedSample {
+  /** Pad voices: the ones routed through the layer's sweeping low-pass. */
+  readonly pad: number;
+  /** The root under the chord, which is everything else below the melody. */
+  readonly bass: number;
+  readonly total: number;
+}
+
+/**
+ * Sums every voice envelope alive at `at`, through its layer gain and the trim:
+ * the amplitude the shared bus actually sees, which is the number `BED_PEAK` is
+ * supposed to budget. Assumes a single active layer.
+ */
+function bedAt(ctx: FakeAudioContext, at: number): BedSample {
+  const trim = valueAt(mixGain(ctx).gain, at);
+  const layer = layerGains(ctx)[0];
+  const level = layer ? valueAt(layer.gain, at) : 0;
+
+  let pad = 0;
+  let bass = 0;
+  let total = 0;
+  for (const osc of ctx.oscillators) {
+    if (osc.started === null || at < osc.started || at > (osc.stopped ?? 0)) continue;
+    const envelope = envelopeOf(osc);
+    if (!envelope) continue;
+    const amplitude = valueAt(envelope.gain, at) * level * trim;
+    total += amplitude;
+    if (envelope.wiring.some((node) => node instanceof FakeBiquad)) {
+      // Routed through the layer's sweeping low-pass: a pad voice.
+      pad += amplitude;
+    } else {
+      // The root is the only voice with a low-pass under 1 kHz in front of it;
+      // the arpeggio opens at 3.2 kHz. Pitch alone will not do it, because the
+      // C chord's bass octave lands higher than the arpeggio's lowest note.
+      const head = osc.wiring[0];
+      if (head instanceof FakeBiquad && (head.frequency.events[0]?.value ?? 0) <= 1000) bass += amplitude;
+    }
+  }
+  return { pad, bass, total };
+}
+
+/** The layer's shared low-pass: the one biquad wired into a cross-fade gain. */
+function padFilter(ctx: FakeAudioContext): FakeBiquad | undefined {
+  const layers = layerGains(ctx);
+  return ctx.created.find(
+    (node): node is FakeBiquad =>
+      node instanceof FakeBiquad && layers.some((gain) => node.connections.includes(gain)),
+  );
+}
+
+/** Samples `bedAt` across a window, every 50 ms. */
+function bedOver(ctx: FakeAudioContext, from: number, to: number): BedSample[] {
+  const samples: BedSample[] = [];
+  for (let at = from; at <= to; at += 0.05) samples.push(bedAt(ctx, at));
+  return samples;
+}
+
 // ---------------------------------------------------------------------------
 // Suite 2 — with a hand-written Web Audio implementation
 // ---------------------------------------------------------------------------
@@ -491,9 +626,13 @@ describe('MusicController with a synthetic Web Audio implementation', () => {
         .flatMap((node) => (node instanceof FakeGain ? [node] : node.connections))
         .find((node): node is FakeGain => node instanceof FakeGain);
       expect(gain, 'a voice reached the bus without a gain envelope').toBeDefined();
-      // Silence -> peak -> silence: no click at either end.
+      // Silence -> peak -> silence: no click at either end, and the decay ends
+      // at a true zero rather than trailing off towards one.
       expect(gain?.gain.events[0]?.type).toBe('set');
-      expect(gain?.gain.last('exponential')?.value).toBeLessThan(0.01);
+      expect(gain?.gain.events[0]?.value).toBe(0);
+      const close = gain?.gain.events.at(-1);
+      expect(close?.type).toBe('linear');
+      expect(close?.value).toBe(0);
     }
     music.dispose();
   });
@@ -587,12 +726,25 @@ describe('MusicController with a synthetic Web Audio implementation', () => {
     expect(outgoing).toBe(menuLayer);
 
     // The old scene ramps down and the new one ramps up over the same window.
-    const down = outgoing.gain.last('exponential');
-    const up = incoming.gain.last('exponential');
-    expect(down?.value).toBeLessThan(0.01);
+    const down = outgoing.gain.last('linear');
+    const up = incoming.gain.last('linear');
+    expect(down?.value).toBe(0);
     expect(down?.time ?? 0).toBeGreaterThan(switchedAt);
     expect(up?.value).toBeGreaterThan(0.1);
     expect(up?.time ?? 0).toBeGreaterThan(switchedAt);
+
+    // And they sum to a steady bed the whole way across, which is the part that
+    // makes it a cross-fade at all. Exponential ramps to silence on both sides
+    // would satisfy every assertion above and still drop to -34 dB at the
+    // midpoint, because an exponential ramp is linear in dB: a hole, not a fade.
+    const floor = Math.min(valueAt(outgoing.gain, switchedAt), up?.value ?? 0) * 0.9;
+    expect(floor).toBeGreaterThan(0);
+    for (let at = switchedAt + 0.05; at <= switchedAt + 1.2; at += 0.05) {
+      const sum = valueAt(outgoing.gain, at) + valueAt(incoming.gain, at);
+      expect(sum, `bed collapsed to ${sum.toFixed(4)} at +${(at - switchedAt).toFixed(2)}s`).toBeGreaterThan(
+        floor,
+      );
+    }
 
     // Nothing was cut: the outgoing scene is still connected and still ringing.
     expect(outgoing.connections.length).toBeGreaterThan(0);
@@ -675,6 +827,67 @@ describe('MusicController with a synthetic Web Audio implementation', () => {
     music.dispose();
   });
 
+  it('keeps the whole bed under the shared limiter at maximum volume', () => {
+    for (const scene of ALL_SCENES) {
+      ctx = new FakeAudioContext();
+      const music = controller({ volume: 1 });
+      music.play(scene);
+      run(ctx, 30);
+
+      // Every voice alive at once, through its layer and the trim — not the
+      // trim on its own, which says nothing about how many voices stack on it.
+      const peak = Math.max(...bedOver(ctx, 1, 28).map((sample) => sample.total));
+      expect(peak, `${scene} measured nothing`).toBeGreaterThan(0.02);
+      expect(peak, `${scene} bed peaks at ${peak.toFixed(4)}`).toBeLessThan(LIMITER_THRESHOLD);
+      music.dispose();
+    }
+  });
+
+  it('holds the pad and the bass through a chord change instead of pumping', () => {
+    for (const [scene, span] of [
+      ['menu', (30 / 76) * 16],
+      ['match', (30 / 62) * 16],
+    ] as const) {
+      ctx = new FakeAudioContext();
+      const music = controller({ volume: 1 });
+      music.play(scene);
+      run(ctx, span * 5);
+
+      // From halfway through the second chord to halfway through the fifth:
+      // three changes, with the bed fully established either side of each.
+      const samples = bedOver(ctx, span * 1.5, span * 4.5);
+      const swing = (values: number[]): number => Math.min(...values) / Math.max(...values);
+      const pad = swing(samples.map((sample) => sample.pad));
+      const bass = swing(samples.map((sample) => sample.bass));
+
+      // The chord is supposed to hand over, not hand back: before the fix both
+      // voices began decaying while the old chord was still the only thing
+      // playing, so the pad dropped 19 dB and the bass 40 dB once a chord.
+      expect(pad, `${scene} pad swings to ${pad.toFixed(3)} of its steady level`).toBeGreaterThan(0.6);
+      expect(bass, `${scene} bass swings to ${bass.toFixed(3)} of its steady level`).toBeGreaterThan(0.6);
+      music.dispose();
+    }
+  });
+
+  it('is at full level before the first flourish note peaks', () => {
+    for (const scene of ['victory', 'defeat'] as MusicScene[]) {
+      ctx = new FakeAudioContext();
+      const music = controller();
+      music.play(scene);
+
+      const layer = layerGains(ctx)[0];
+      const start = layer.gain.events[0]?.time ?? 0;
+      const target = layer.gain.events[1]?.value ?? 0;
+      // The flourish is scheduled on the layer's very first step and its opening
+      // note reaches its peak 12 ms later, so any real fade-in eats the one
+      // transient the whole transition is built around: at 0.25 s, victory's F4
+      // arrived 27 dB down and the arpeggio was heard from its third note.
+      const reached = valueAt(layer.gain, start + 0.012);
+      expect(reached, `${scene} swallowed its opening note`).toBeGreaterThan(target * 0.99);
+      music.dispose();
+    }
+  });
+
   it('stops scheduling at zero volume and starts again above it', () => {
     const music = controller({ volume: 0 });
     music.play('menu');
@@ -700,8 +913,11 @@ describe('MusicController with a synthetic Web Audio implementation', () => {
     const voices = ctx.oscillators.length;
 
     music.setEnabled(false);
-    // A fade, not a cut.
-    expect(layer.gain.last('exponential')?.value).toBeLessThan(0.01);
+    // A fade, not a cut — and one that reaches silence rather than approaching
+    // it asymptotically for the whole of its length.
+    const fade = layer.gain.last('linear');
+    expect(fade?.value).toBe(0);
+    expect(fade?.time ?? 0).toBeGreaterThan(ctx.currentTime);
 
     run(ctx, 5);
     // Nothing new was scheduled and nothing is left running.
@@ -772,6 +988,60 @@ describe('MusicController with a synthetic Web Audio implementation', () => {
     music.dispose();
   });
 
+  it('brings the bed back at once whatever phase of a chord a resume lands in', () => {
+    const step = 30 / 62; // match: an eighth note at 62 BPM
+    const stepsPerChord = 16;
+
+    for (let phase = 0; phase < stepsPerChord; phase++) {
+      ctx = new FakeAudioContext();
+      const music = controller();
+      music.play('match');
+      // Hide the tab `phase` steps into a chord. Only one of the sixteen is a
+      // chord boundary; the pad, bass and filter sweep used to wait for the
+      // next one, which in 'match' is up to 7.3 s of arpeggio — over bars that
+      // are 70% rests, so mostly of nothing at all.
+      run(ctx, phase * step + 0.05);
+      music.suspend();
+      run(ctx, 2);
+
+      const resumedAt = ctx.currentTime;
+      music.resume();
+      run(ctx, 1);
+
+      const bed = bedAt(ctx, resumedAt + 0.6);
+      expect(bed.pad, `phase ${phase} came back without a pad`).toBeGreaterThan(0);
+      expect(bed.bass, `phase ${phase} came back without a bass`).toBeGreaterThan(0);
+      music.dispose();
+    }
+  });
+
+  it('re-establishes the bed when a throttled tab catches up', () => {
+    const music = controller();
+    music.play('menu');
+    run(ctx, 20);
+
+    // No visibility change, just a background tab: the audio clock ran on for a
+    // minute while the 25 ms timer fired perhaps once.
+    ctx.advance(60);
+    const caughtUpAt = ctx.currentTime;
+    vi.advanceTimersByTime(25);
+
+    const fresh = ctx.oscillators.filter((osc) => (osc.started ?? 0) >= caughtUpAt);
+    // The backlog is dropped rather than dumped into the graph...
+    expect(fresh.length).toBeLessThan(20);
+    // ...but the bed picks up from here instead of leaving a hole until the
+    // next chord boundary, which for menu is up to 5.9 s away.
+    const bed = bedAt(ctx, caughtUpAt + 0.8);
+    expect(bed.pad).toBeGreaterThan(0);
+    expect(bed.bass).toBeGreaterThan(0);
+
+    // And the layer's low-pass sweeps again rather than sitting parked at its
+    // floor for the rest of the chord.
+    const filter = padFilter(ctx);
+    expect(filter?.frequency.last('linear')?.time ?? 0).toBeGreaterThan(caughtUpAt);
+    music.dispose();
+  });
+
   it('does not resume a scene that was stopped while suspended', () => {
     const music = controller();
     music.play('menu');
@@ -810,7 +1080,103 @@ describe('MusicController with a synthetic Web Audio implementation', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Suite 3 — hostile and failing graphs
+// Suite 3 — wired to the sound engine it actually ships with
+//
+// Music volume and effects volume are two separate, unqualified sliders in the
+// settings panel. Nothing the player does to one may move the other.
+// ---------------------------------------------------------------------------
+
+describe('MusicController on the real sound engine', () => {
+  const scope = globalThis as unknown as { AudioContext?: unknown };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    scope.AudioContext = FakeAudioContext;
+  });
+
+  afterEach(() => {
+    delete scope.AudioContext;
+    vi.useRealTimers();
+  });
+
+  /** The engine's effects trim: the first gain it wires to the speakers. */
+  function effectsTrim(ctx: FakeAudioContext): FakeGain {
+    const found = ctx.created.find(
+      (node): node is FakeGain => node instanceof FakeGain && node.connections.includes(ctx.destination),
+    );
+    if (!found) throw new Error('no effects trim is connected to the destination');
+    return found;
+  }
+
+  function playing(): { sound: SoundController; music: MusicController; ctx: FakeAudioContext } {
+    const sound = new SoundController({ enabled: true, volume: 1 });
+    const music = new MusicController(() => sound.bus(), { enabled: true, volume: 1 });
+    music.play('menu');
+    const bus = sound.bus();
+    if (!bus) throw new Error('the sound engine handed back no bus');
+    return { sound, music, ctx: bus.ctx as unknown as FakeAudioContext };
+  }
+
+  it('keeps the bed audible when the effects volume is dragged to zero', () => {
+    const { sound, music, ctx } = playing();
+    const trim = effectsTrim(ctx);
+    const voices = ctx.oscillators.length;
+    expect(voices).toBeGreaterThan(0);
+
+    sound.setVolume(0);
+
+    // The cue path really is muted...
+    expect(sound.volume).toBe(0);
+    expect(trim.gain.value).toBe(0);
+    // ...and the music, which the player never touched, is untouched: it does
+    // not pass through that trim at all.
+    expect(music.volume).toBe(1);
+    expect(music.scene).toBe('menu');
+    for (const osc of ctx.oscillators) {
+      const downstream = reachable(osc);
+      expect(downstream.has(ctx.destination), 'the bed lost its way to the speakers').toBe(true);
+      expect(downstream.has(trim), 'the bed is scaled by the effects slider').toBe(false);
+    }
+
+    // And it is still worth synthesising: the scheduler keeps running because
+    // there is something to hear, not in spite of there being nothing.
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    run(ctx, 2);
+    expect(ctx.oscillators.length).toBeGreaterThan(voices);
+
+    music.dispose();
+    sound.dispose();
+  });
+
+  it('leaves the bed alone when the cues are switched off', () => {
+    const { sound, music, ctx } = playing();
+    const voices = ctx.oscillators.length;
+
+    sound.setEnabled(false);
+    // "Sound off" cuts cue tails and has never touched the music. The volume
+    // slider must behave the same way round, which is the asymmetry that gave
+    // the coupling away.
+    expect(ctx.oscillators.every((osc) => (osc.stopped ?? 0) > ctx.currentTime)).toBe(true);
+    run(ctx, 2);
+    expect(ctx.oscillators.length).toBeGreaterThan(voices);
+    expect(music.scene).toBe('menu');
+
+    music.dispose();
+    sound.dispose();
+  });
+
+  it('unhooks the bed when the sound engine is disposed', () => {
+    const { sound, music, ctx } = playing();
+
+    sound.dispose();
+    music.dispose();
+    expect(ctx.created.every((node) => node.connections.length === 0)).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite 4 — hostile and failing graphs
 // ---------------------------------------------------------------------------
 
 describe('MusicController against a failing audio graph', () => {

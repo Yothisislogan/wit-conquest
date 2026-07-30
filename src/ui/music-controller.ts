@@ -15,7 +15,8 @@
  *  - Nothing is constructed at import time and no AudioContext is touched until
  *    `play()` is first called. The context is not ours: it is borrowed from the
  *    sound engine through the `bus` supplier so the whole app owns exactly one
- *    (iOS refuses extras) and one compressor limits cues and music together.
+ *    (iOS refuses extras). The node it hands back is the bed's own output at
+ *    unity, so the music slider and the effects slider are genuinely separate.
  *  - Timing uses the standard lookahead pattern: a 25 ms timer that schedules
  *    every note that falls inside the next 120 ms against `ctx.currentTime`.
  *    Timers alone drift and stutter under load; the audio clock does not.
@@ -64,24 +65,50 @@ const LOOKAHEAD = 0.12;
 /** Start a hair ahead of `currentTime` so an attack is not clipped by the
  *  render quantum already in flight. */
 const LEAD = 0.02;
-/** Scene-to-scene cross-fade. Long enough to read as a transition, not a cut. */
+/**
+ * Scene-to-scene cross-fade. Long enough to read as a transition, not a cut.
+ *
+ * Both sides ramp *linearly*. An exponential ramp is linear in dB, so a full-
+ * scale layer taking one down to practical silence is 40 dB down at the
+ * halfway mark: two of them crossing sum to -34 dB and the transition is heard
+ * as a hole, not a fade. Linear keeps the sum at unity for the correlated case
+ * — and menu and match are literally the same harmony, so that is the case
+ * that matters here.
+ */
 const CROSSFADE = 1.2;
 /** Fade used when the music is being taken away (mute, stop, tab hidden). */
 const RELEASE_FADE = 0.6;
 /** Extra time a source stays alive after its envelope closes. */
 const TAIL = 0.05;
-/** Exponential ramps cannot reach zero; this is our practical silence. */
+/** Exponential ramps cannot reach zero, so every ramp target must clear this;
+ *  it also floors how quiet a voice's peak is allowed to be. */
 const MIN_GAIN = 0.0001;
 /**
- * Ceiling of the whole music bed on the shared bus, before the volume trim.
+ * Where a voice's exponential decay stops and a linear ramp takes over.
  *
- * The busiest moment of the busiest scene sums to ~1.15 across its voices if
- * they were all in phase, so a full-volume bed peaks at 0.17 worst case and
- * nearer 0.12 in practice: below the shared compressor's -18 dBFS threshold,
- * and far below the cues. That is the whole point — music must never mask a
- * move, and a cue must always cut through it.
+ * A decay that targets true silence exponentially spends nearly all of its
+ * length inaudible, so the note is perceptually over in its first fifth. Ending
+ * the exponential 20 dB down and walking the rest to zero over
+ * {@link RELEASE_TAIL} keeps the audible part of the decay spread across the
+ * whole note while still finishing at silence rather than a step.
  */
-const BED_PEAK = 0.15;
+const RELEASE_FLOOR = 0.1;
+/** Length of that final linear ramp: short enough to be part of the decay,
+ *  long enough not to click. */
+const RELEASE_TAIL = 0.08;
+/**
+ * Ceiling of the whole music bed, before the volume trim.
+ *
+ * The busiest moment of the busiest scene (menu: nine pad voices, two bass
+ * voices mid-change and an arpeggio note) sums to ~1.1 across its voices if
+ * they were all in phase, so a full-volume bed peaks near 0.09 — about
+ * -21 dBFS. Two things follow, and both are the point:
+ *  - it stays under the cue compressor's -18 dBFS threshold, so even if the
+ *    bed ever shared that bus it could not drive gain reduction;
+ *  - it stays below the quietest cue (`tie`, 0.11), so a move always cuts
+ *    through the music rather than the other way round.
+ */
+const BED_PEAK = 0.08;
 /**
  * A frozen tab can leave the scheduler seconds behind. Cap the catch-up so it
  * resyncs (see `tick`) instead of firing a minute of music at once.
@@ -90,6 +117,22 @@ const MAX_STEPS_PER_TICK = 24;
 /** Pad voices outlast their chord by this factor so changes overlap and the
  *  loop has no seam. */
 const PAD_OVERLAP = 1.3;
+/**
+ * The overlap itself, as a fraction of a chord's own span. The incoming chord
+ * fades up across exactly this window while the outgoing one fades down, which
+ * is what makes a chord change a hand-over rather than a gap.
+ */
+const PAD_FADE = PAD_OVERLAP - 1;
+/**
+ * Layer fade-in for a scene that opens on a transient.
+ *
+ * Victory and defeat begin with a flourish scheduled on the layer's very first
+ * step. Any real fade-in swallows it: with a 0.25 s one, victory's opening F4
+ * was 27 dB down and the arpeggio was heard from its third note. Ten
+ * milliseconds is below the first note's own attack, so the flourish arrives
+ * intact and its own envelopes do all the shaping.
+ */
+const FLOURISH_FADE = 0.01;
 
 // ---------------------------------------------------------------------------
 // The score
@@ -273,15 +316,15 @@ const SCENES: Record<MusicScene, SceneSpec> = {
     flourish: null,
   },
 
-  // Flourish first (hence the fast fade-in), then a single held F major with
-  // the odd sparkle over it.
+  // Flourish first — hence no fade-in to speak of; see FLOURISH_FADE — then a
+  // single held F major with the odd sparkle over it.
   victory: {
     step: eighth(96),
     stepsPerBar: 8,
     barsPerChord: 4,
     progression: [F_MAJOR],
     level: 1,
-    fadeIn: 0.25,
+    fadeIn: FLOURISH_FADE,
     seed: 0x77696e21,
     padPeak: 0.08,
     bassPeak: 0.22,
@@ -299,7 +342,7 @@ const SCENES: Record<MusicScene, SceneSpec> = {
     barsPerChord: 4,
     progression: [D_MINOR],
     level: 0.85,
-    fadeIn: 0.3,
+    fadeIn: FLOURISH_FADE,
     seed: 0x6c6f7373,
     padPeak: 0.075,
     bassPeak: 0.2,
@@ -378,6 +421,11 @@ interface ToneSpec {
  * Attack / hold / decay on a gain node. Every voice gets one: an oscillator
  * connected straight to a bus clicks on both ends, and a bed of clicks is worse
  * than no music.
+ *
+ * The decay is exponential because that is what a plucked or bowed note does,
+ * but it stops at {@link RELEASE_FLOOR} and hands the last of it to a short
+ * linear ramp — see that constant for why running the exponential all the way
+ * to silence makes a long note sound short.
  */
 function envelope(
   ctx: AudioContext,
@@ -392,10 +440,14 @@ function envelope(
   const level = clamp(peak, MIN_GAIN * 10, 1);
   const rise = clamp(attack, 0.004, duration * 0.6);
   const decayStart = Math.max(start + rise, Math.min(start + rise + Math.max(0, hold), end - 0.005));
-  gain.gain.setValueAtTime(MIN_GAIN, start);
+  // Never long enough to eat the decay it terminates, however short that decay
+  // was clamped to be.
+  const tail = Math.min(RELEASE_TAIL, (end - decayStart) * 0.35);
+  gain.gain.setValueAtTime(0, start);
   gain.gain.linearRampToValueAtTime(level, start + rise);
   gain.gain.setValueAtTime(level, decayStart);
-  gain.gain.exponentialRampToValueAtTime(MIN_GAIN, end);
+  gain.gain.exponentialRampToValueAtTime(level * RELEASE_FLOOR, end - tail);
+  gain.gain.linearRampToValueAtTime(0, end);
   return gain;
 }
 
@@ -435,8 +487,17 @@ function tone(sink: Sink, spec: ToneSpec): void {
  * The pad: each chord tone as a pair of triangles a few cents apart. The slow
  * beating between them is the whole timbre — it is what makes a stack of
  * oscillators sound like an instrument breathing rather than a test tone.
+ *
+ * `span` is the chord's own length; the voices outlive it by {@link PAD_OVERLAP}
+ * so that the outgoing chord's decay and the incoming chord's attack occupy the
+ * same window. That only works if the sustain reaches all the way to
+ * `start + span`: an ordinary attack/decay envelope starts fading while the old
+ * chord is still the only thing playing, and the bed drops into a hole once per
+ * chord instead of changing colour.
  */
-function padChord(sink: Sink, chord: Chord, start: number, duration: number, peak: number): void {
+function padChord(sink: Sink, chord: Chord, start: number, span: number, peak: number): void {
+  const duration = span * PAD_OVERLAP;
+  const attack = span * PAD_FADE;
   chord.voicing.forEach((semitone, index) => {
     const freq = dNote(semitone - 12);
     for (const detune of [-7, 6]) {
@@ -448,15 +509,15 @@ function padChord(sink: Sink, chord: Chord, start: number, duration: number, pea
         duration,
         peak,
         toPad: true,
-        // Very long attack and hold: the chord swells in and only starts
-        // fading once the next one has already begun.
-        attack: duration * 0.35,
-        hold: duration * 0.3,
+        attack,
+        hold: span - attack,
       });
     }
     // One sine an octave above the lowest voice adds body without adding a
-    // note anyone can pick out.
+    // note anyone can pick out. It swells a little more slowly than the
+    // triangles for movement, but lands its decay on the same instant they do.
     if (index === 0) {
+      const slower = attack * 1.25;
       tone(sink, {
         type: 'sine',
         freq: freq * 2,
@@ -464,36 +525,47 @@ function padChord(sink: Sink, chord: Chord, start: number, duration: number, pea
         duration,
         peak: peak * 0.45,
         toPad: true,
-        attack: duration * 0.4,
-        hold: duration * 0.25,
+        attack: slower,
+        hold: span - slower,
       });
     }
   });
 }
 
-/** Root note under the chord: a sine for weight, a quiet octave for phones. */
-function bassRoot(sink: Sink, chord: Chord, start: number, duration: number, peak: number): void {
+/**
+ * Root note under the chord: a sine for weight, a quiet octave for phones.
+ *
+ * The bass gets a short attack and a short tail rather than the pad's long
+ * cross-fade. A root has to *arrive* on the beat the harmony moves, and a bass
+ * that smears a third of a bar into the next chord muddies the change it is
+ * supposed to mark — so it sustains to `start + span` and then clears out.
+ */
+function bassRoot(sink: Sink, chord: Chord, start: number, span: number, peak: number): void {
   const freq = dNote(chord.bass - 24);
+  const tail = Math.min(0.35, span * 0.15);
+  const attack = Math.min(0.25, span * 0.25);
   tone(sink, {
     type: 'sine',
     freq,
     start,
-    duration,
+    duration: span + tail,
     peak,
-    attack: Math.min(0.9, duration * 0.2),
-    hold: duration * 0.35,
+    attack,
+    hold: span - attack,
     filter: { freq: 320, q: 0.5 },
   });
   // Phone speakers reproduce almost nothing below ~150 Hz, so the octave is
-  // what actually carries the root on the device most people play on.
+  // what actually carries the root on the device most people play on — which is
+  // exactly why it holds as long as the sine rather than dropping out early.
+  const octaveAttack = Math.min(0.35, span * 0.3);
   tone(sink, {
     type: 'triangle',
     freq: freq * 2,
     start,
-    duration: duration * 0.8,
+    duration: span + tail,
     peak: peak * 0.3,
-    attack: Math.min(1.2, duration * 0.25),
-    hold: duration * 0.25,
+    attack: octaveAttack,
+    hold: span - octaveAttack,
     filter: { freq: 700, q: 0.5 },
   });
 }
@@ -585,6 +657,14 @@ interface Layer {
   step: number;
   /** Absolute context time of that step. */
   nextTime: number;
+  /**
+   * Whether a chord has been committed for wherever this layer currently sits.
+   *
+   * False on a fresh layer and again after every resync, because both can drop
+   * us into the middle of a chord — and the pad, bass and filter sweep are
+   * otherwise only emitted on an exact chord boundary. See `scheduleStep`.
+   */
+  primed: boolean;
   cleanup: ReturnType<typeof setTimeout> | null;
 }
 
@@ -800,8 +880,8 @@ export class MusicController {
       const start = ctx.currentTime + LEAD;
 
       const gain = ctx.createGain();
-      gain.gain.setValueAtTime(MIN_GAIN, start);
-      gain.gain.exponentialRampToValueAtTime(spec.level, start + spec.fadeIn);
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(spec.level, start + spec.fadeIn);
       gain.connect(mix.gain);
 
       const pad = ctx.createBiquadFilter();
@@ -820,6 +900,7 @@ export class MusicController {
         voices: new Set<Voice>(),
         step: carried && carried.scene === scene ? carried.step : 0,
         nextTime: start,
+        primed: false,
         cleanup: null,
       };
     } catch {
@@ -833,10 +914,11 @@ export class MusicController {
     try {
       const param = layer.gain.gain;
       // Re-anchor on the value the fade-in reached before overriding it;
-      // cancelling alone would snap the gain and click.
+      // cancelling alone would snap the gain and click. Linear, and to a true
+      // zero — see CROSSFADE for why an exponential ramp here is a hole.
       param.cancelScheduledValues(now);
-      param.setValueAtTime(Math.max(MIN_GAIN, param.value), now);
-      param.exponentialRampToValueAtTime(MIN_GAIN, now + fade);
+      param.setValueAtTime(Math.max(0, param.value), now);
+      param.linearRampToValueAtTime(0, now + fade);
     } catch {
       /* Fall through: the teardown below still frees everything. */
     }
@@ -931,8 +1013,13 @@ export class MusicController {
     try {
       const now = mix.ctx.currentTime;
       // A backgrounded tab throttles timers to once a minute; rather than dump
-      // a minute of backlog into the graph, pick the phrase up from here.
-      if (layer.nextTime < now) layer.nextTime = now + LEAD;
+      // a minute of backlog into the graph, pick the phrase up from here. That
+      // lands us at an arbitrary point inside a chord, so the bed has to be
+      // re-established rather than waited for.
+      if (layer.nextTime < now) {
+        layer.nextTime = now + LEAD;
+        layer.primed = false;
+      }
 
       const horizon = now + LOOKAHEAD;
       for (let i = 0; i < MAX_STEPS_PER_TICK && layer.nextTime < horizon; i++) {
@@ -959,12 +1046,23 @@ export class MusicController {
     };
 
     const stepsPerChord = spec.stepsPerBar * spec.barsPerChord;
-    if (step % stepsPerChord === 0) {
+    const into = step % stepsPerChord;
+    // Normally the bed lands on chord boundaries. But a layer that started from
+    // a carried position — a resume, or a throttled tab caught up in `tick` —
+    // begins somewhere inside a chord, and waiting for the next boundary leaves
+    // it with nothing but arpeggio (which 'match' rests through 70% of its
+    // bars) for up to a full chord: six seconds of near-silence on the way back
+    // from a tab switch. So the first step a layer emits always carries the
+    // chord it is standing in.
+    if (into === 0 || !layer.primed) {
+      layer.primed = true;
       const chord = spec.progression[Math.floor(step / stepsPerChord) % spec.progression.length];
-      const span = stepsPerChord * spec.step;
-      padChord(sink, chord, time, span * PAD_OVERLAP, spec.padPeak);
-      bassRoot(sink, chord, time, span * PAD_OVERLAP, spec.bassPeak);
-      sweep(layer.pad, time, span, spec.filterLo, spec.filterHi);
+      // Only what is left of this chord, so the *next* boundary still lands in
+      // phase with the progression.
+      const remaining = (stepsPerChord - into) * spec.step;
+      padChord(sink, chord, time, remaining, spec.padPeak);
+      bassRoot(sink, chord, time, remaining, spec.bassPeak);
+      sweep(layer.pad, time, remaining, spec.filterLo, spec.filterHi);
     }
 
     // Scenes that open with a flourish schedule it once, on their first step.

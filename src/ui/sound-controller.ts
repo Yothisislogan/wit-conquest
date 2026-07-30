@@ -477,6 +477,8 @@ export class SoundController {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private compressor: DynamicsCompressorNode | null = null;
+  /** Output for the music bed; built on demand by {@link bus}. */
+  private musicOut: GainNode | null = null;
   private noise: AudioBuffer | null = null;
 
   private disposed = false;
@@ -588,23 +590,28 @@ export class SoundController {
   /**
    * Lazily-created shared audio graph, or null when Web Audio is unavailable.
    *
-   * Exposed so the music engine can render into the *same* context and the same
-   * compressor. Two reasons it must share rather than build its own:
-   *  - iOS caps how many AudioContexts a page may hold, and a second one there
-   *    is simply refused — the page gets one, so this is it.
-   *  - Sharing the compressor means a loud cue and the music bed are limited
-   *    together. Separate graphs would sum *after* limiting and could clip.
+   * Exposed so the music engine can render into the *same* context: iOS caps
+   * how many AudioContexts a page may hold, and a second one there is simply
+   * refused — the page gets one, so this is it.
    *
-   * The returned destination sits ahead of the effects volume trim, so anything
-   * routed here is also scaled by {@link volume}: callers that want an
-   * independent level must apply their own gain, and a zero effects volume
-   * silences the shared bus.
+   * The destination handed back is the bed's *own* output, deliberately not the
+   * cue path. Music and effects are two separate sliders in the settings panel,
+   * and while the bed hung off the cue bus, dragging "Volume" to 0 silenced the
+   * music with the music switch still reading "on", and every drag of the
+   * effects slider audibly moved the bed. Callers still own their own level:
+   * this node is at unity.
+   *
+   * Leaving the cue limiter out of the bed's path costs nothing and fixes
+   * something. Cues stack during a conversion cascade and genuinely need
+   * limiting; the bed is a single level-controlled signal that peaks around
+   * -21 dBFS by construction, so it can neither clip nor drive gain reduction —
+   * it could only *cause* it, ducking the very cues it is meant to sit under.
    */
   bus(): { ctx: AudioContext; destination: AudioNode } | null {
     try {
       const ctx = this.context();
       if (!ctx) return null;
-      return { ctx, destination: this.compressor ?? ctx.destination };
+      return { ctx, destination: this.musicDestination(ctx) };
     } catch {
       // `context()` already swallows its own failures; this is belt and braces
       // so a caller in a hostile environment still just gets "no audio".
@@ -628,12 +635,14 @@ export class SoundController {
     try {
       this.compressor?.disconnect();
       this.master?.disconnect();
+      this.musicOut?.disconnect();
     } catch {
       /* Already torn down. */
     }
     this.ctx = null;
     this.master = null;
     this.compressor = null;
+    this.musicOut = null;
     this.noise = null;
     if (!ctx) return;
     try {
@@ -673,7 +682,8 @@ export class SoundController {
 
       const compressor = ctx.createDynamicsCompressor();
       // Sits *ahead* of the volume trim so its threshold describes a fixed
-      // property of the mix rather than something that moves with the slider.
+      // property of the cue mix rather than something that moves with the
+      // slider. Only cues pass through it — see `bus()` for why the bed does not.
       compressor.threshold.value = -18;
       compressor.knee.value = 24;
       compressor.ratio.value = 6;
@@ -688,6 +698,30 @@ export class SoundController {
     } catch {
       this.unavailable = true;
       return null;
+    }
+  }
+
+  /**
+   * The bed's output node, built on first use.
+   *
+   * A plain unity gain rather than `ctx.destination` itself: it gives the bed a
+   * single point to unhook on {@link dispose}, and it keeps the music's routing
+   * an implementation detail of this class rather than something its caller
+   * hard-wires to the speakers.
+   */
+  private musicDestination(ctx: AudioContext): AudioNode {
+    const existing = this.musicOut;
+    if (existing) return existing;
+    try {
+      const out = ctx.createGain();
+      out.gain.value = 1;
+      out.connect(ctx.destination);
+      this.musicOut = out;
+      return out;
+    } catch {
+      // Node construction failed on us; the raw destination still gets the bed
+      // out, which beats handing back nothing and losing the music entirely.
+      return ctx.destination;
     }
   }
 

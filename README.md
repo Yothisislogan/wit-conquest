@@ -160,9 +160,12 @@ which is why the whole game is a few tens of kilobytes and works offline.
 
 Both are off until you switch them on — browser autoplay policy requires a
 gesture, and a surprise soundtrack is nobody's idea of a good first impression.
-Effects and music have independent volume controls, the music shares the
-effects' audio graph so one compressor keeps the mix under control, and it
-suspends itself when the tab is hidden.
+They share a single `AudioContext` (iOS caps how many a page may hold) but take
+separate paths to the output: cues run through a compressor, because a
+conversion cascade stacks several at once and needs limiting, while the bed is a
+single level-controlled signal that gets its own unity output. That keeps the
+two volume sliders genuinely independent, and stops the bed from ducking the
+cues it is meant to sit under. Music suspends itself when the tab is hidden.
 
 ## Accessibility
 

@@ -180,6 +180,37 @@ test.describe('music', () => {
     expect(after.osc).toBeGreaterThan(before.osc);
   });
 
+  test('the bed reaches the speakers without passing through the effects trim', async ({ page }) => {
+    // Record which nodes are wired straight to the destination. The effects
+    // chain contributes exactly one (its volume trim). If the music bed shares
+    // that node, dragging the effects slider to zero silences the music too —
+    // which, with two independent volume controls in the settings, would be a
+    // bug rather than a feature. A second direct connection is the evidence
+    // that the bed has its own path out.
+    await page.addInitScript(() => {
+      const w = window as unknown as { __toDestination: number };
+      w.__toDestination = 0;
+      const connect = AudioNode.prototype.connect as (this: AudioNode, ...a: never[]) => never;
+      // eslint-disable-next-line func-names
+      AudioNode.prototype.connect = function (this: AudioNode, ...args: never[]) {
+        const target = args[0] as unknown;
+        if (target && (target as AudioNode) === (this.context as BaseAudioContext).destination) {
+          w.__toDestination += 1;
+        }
+        return connect.apply(this, args);
+      } as typeof AudioNode.prototype.connect;
+    });
+
+    await page.goto('/?music=on&sound=on&motion=full');
+    await press(page.getByRole('button', { name: 'Play Game' }));
+    await page.waitForTimeout(2000);
+
+    const direct = await page.evaluate(
+      () => (window as unknown as { __toDestination: number }).__toDestination,
+    );
+    expect(direct).toBeGreaterThanOrEqual(2);
+  });
+
   test('music volume is independent of the effects volume', async ({ page }) => {
     await page.goto('/');
     await press(page.locator('#btn-settings'));
