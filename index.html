@@ -22,21 +22,44 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icons/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png" />
+    <!-- Linked here rather than imported from main.ts so the page is still
+         styled if the module fails to load. -->
+    <link rel="stylesheet" href="/src/styles/app.css" />
     <title>Monster Territory</title>
   </head>
   <body>
     <div class="app" id="app">
       <!-- ================= MENU ================= -->
       <section class="screen screen--menu" id="screen-menu" data-screen="menu">
+        <!-- Decorative backdrop. Purely presentational, so it is hidden from
+             assistive technology and disabled entirely under reduced motion. -->
+        <div class="sky" aria-hidden="true">
+          <span class="sky__glow sky__glow--a"></span>
+          <span class="sky__glow sky__glow--b"></span>
+          <span class="sky__glow sky__glow--c"></span>
+          <div class="sky__motes" id="menu-motes"></div>
+        </div>
+
         <div class="screen__inner menu">
+          <div class="menu__audio">
+            <button class="iconbtn" id="btn-sound-menu" type="button" aria-pressed="false">
+              <span class="iconbtn__glyph" aria-hidden="true" data-sound-icon>&#128263;</span>
+              <span class="sr-only" data-sound-label>Sound off</span>
+            </button>
+            <button class="iconbtn" id="btn-music-menu" type="button" aria-pressed="false">
+              <span class="iconbtn__glyph" aria-hidden="true" data-music-icon>&#9834;</span>
+              <span class="sr-only" data-music-label>Music off</span>
+            </button>
+          </div>
+
           <header class="menu__masthead">
             <div class="menu__crest" id="menu-crest" aria-hidden="true"></div>
-            <h1 class="menu__title">Monster<span>Territory</span></h1>
+            <h1 class="menu__title"><span class="menu__title-a">Monster</span> <span class="menu__title-b">Territory</span></h1>
             <p class="menu__tagline">Clone. Jump. Claim the board.</p>
           </header>
 
           <div class="menu__actions">
-            <button class="btn btn--primary btn--jumbo" id="btn-play" type="button">
+            <button class="btn btn--primary btn--jumbo btn--shine" id="btn-play" type="button">
               Play Game
             </button>
             <button class="btn btn--ghost" id="btn-resume" type="button" hidden>
@@ -103,15 +126,6 @@
             <button class="btn btn--tile" id="btn-settings" type="button">
               <span class="btn__icon" aria-hidden="true">&#9881;</span>
               Settings
-            </button>
-            <button
-              class="btn btn--tile"
-              id="btn-sound-menu"
-              type="button"
-              aria-pressed="false"
-            >
-              <span class="btn__icon" aria-hidden="true" data-sound-icon>&#128263;</span>
-              <span data-sound-label>Sound off</span>
             </button>
           </nav>
 
@@ -272,6 +286,21 @@
               </button>
             </div>
 
+            <div class="setting">
+              <label class="setting__label" for="set-music">
+                Music
+                <span class="setting__hint">A slow ambient bed, generated as you play.</span>
+              </label>
+              <button class="switch" id="set-music" type="button" role="switch" aria-checked="false">
+                <span class="switch__track" aria-hidden="true"><span class="switch__thumb"></span></span>
+              </button>
+            </div>
+
+            <div class="setting setting--stacked">
+              <label class="setting__label" for="set-music-volume">Music volume</label>
+              <input class="slider" id="set-music-volume" type="range" min="0" max="100" step="5" value="55" />
+            </div>
+
             <div class="setting setting--stacked">
               <label class="setting__label" for="set-volume">Volume</label>
               <input class="slider" id="set-volume" type="range" min="0" max="100" step="5" value="70" />
@@ -383,10 +412,38 @@
     <div class="sr-only" id="live-assertive" role="alert" aria-live="assertive" aria-atomic="true"></div>
 
     <noscript>
-      <p style="padding: 2rem; font: 1rem/1.5 system-ui, sans-serif">
+      <p class="bootnote">
         Monster Territory needs JavaScript to run. Please enable it and reload.
       </p>
     </noscript>
+
+    <!-- If the module never executes — the usual cause is opening the source
+         folder directly instead of a build, where /src/main.ts is served as
+         TypeScript and the browser refuses it — say so instead of leaving a
+         half-rendered page on screen. -->
+    <div class="bootfail" id="boot-fail" hidden>
+      <h2>Monster Territory could not start</h2>
+      <p>
+        The game did not finish loading. This almost always means the page was
+        opened straight from the source folder, where the browser cannot run the
+        game's TypeScript.
+      </p>
+      <p class="bootfail__how">
+        Build it first, then open the built copy:
+        <code>npm install &amp;&amp; npm run build &amp;&amp; npm run preview</code>
+        — or run <code>npm run dev</code> while working on it.
+      </p>
+    </div>
+
+    <script>
+      // Classic script on purpose: it has to run even when the module graph does not.
+      window.setTimeout(function () {
+        if (!window.__monsterTerritoryBooted) {
+          var el = document.getElementById('boot-fail');
+          if (el) el.hidden = false;
+        }
+      }, 2500);
+    </script>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -68,6 +68,17 @@
   --sar: env(safe-area-inset-right, 0px);
 
   --shadow: 0 10px 30px rgba(6, 3, 20, 0.5);
+
+  /* Title-screen backdrop. Kept as tokens so the aurora follows the colour
+     scheme instead of fighting it. */
+  --sky-top: #2a1d5e;
+  --sky-bottom: #120e30;
+  --sky-glow-opacity: 0.55;
+  --sky-glow-blur: 60px;
+  --veil: 88%;
+  /* Warm mid-stop of the title gradient; it has to stay legible against the
+     backdrop, so it goes pale on the dark scheme and deep on the light one. */
+  --title-spark: #ffd6a0;
 }
 
 @media (prefers-color-scheme: light) {
@@ -99,6 +110,13 @@
     --cell-target: #c9bcf5;
 
     --shadow: 0 10px 26px rgba(60, 40, 120, 0.16);
+
+    --sky-top: #ffffff;
+    --sky-bottom: #ddd4fb;
+    --sky-glow-opacity: 0.4;
+    --sky-glow-blur: 70px;
+    --veil: 82%;
+    --title-spark: #b8560a;
   }
 }
 
@@ -118,6 +136,11 @@
   --cell-target: #6a5ac0;
   --p1: #66d9ff;
   --p2: #ffab5e;
+  --sky-top: #0b0820;
+  --sky-bottom: #000000;
+  --sky-glow-opacity: 0.22;
+  --veil: 100%;
+  --title-spark: #ffd6a0;
 }
 .app[data-contrast='high'] .hex {
   stroke-width: 0.09;
@@ -444,22 +467,175 @@ kbd {
 
 /* ---------------------------------------------------------- 4. menu screen */
 
+/* The title screen carries the whole first impression, so it gets a living
+   backdrop: three slow-drifting colour fields plus a field of rising hexes.
+   All of it is decorative and switched off wholesale under reduced motion. */
+
+.screen--menu {
+  position: absolute;
+  isolation: isolate;
+}
+
+.sky {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(140% 100% at 50% -10%, var(--sky-top) 0%, transparent 62%),
+    linear-gradient(180deg, var(--bg) 0%, var(--sky-bottom) 100%);
+}
+
+.sky__glow {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  filter: blur(var(--sky-glow-blur));
+  opacity: var(--sky-glow-opacity);
+  will-change: transform;
+}
+
+.sky__glow--a {
+  width: 62vmin;
+  height: 62vmin;
+  left: -18vmin;
+  top: -10vmin;
+  background: radial-gradient(circle, var(--p1) 0%, transparent 70%);
+  animation: drift-a 22s ease-in-out infinite alternate;
+}
+
+.sky__glow--b {
+  width: 56vmin;
+  height: 56vmin;
+  right: -16vmin;
+  top: 6vmin;
+  background: radial-gradient(circle, var(--p2) 0%, transparent 70%);
+  animation: drift-b 27s ease-in-out infinite alternate;
+}
+
+.sky__glow--c {
+  width: 78vmin;
+  height: 78vmin;
+  left: 50%;
+  bottom: -34vmin;
+  translate: -50% 0;
+  background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+  opacity: calc(var(--sky-glow-opacity) * 0.72);
+  animation: drift-c 31s ease-in-out infinite alternate;
+}
+
+@keyframes drift-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(9vmin, 7vmin, 0) scale(1.18); }
+}
+
+@keyframes drift-b {
+  from { transform: translate3d(0, 0, 0) scale(1.1); }
+  to   { transform: translate3d(-11vmin, 10vmin, 0) scale(0.92); }
+}
+
+@keyframes drift-c {
+  from { transform: translate3d(-4vmin, 0, 0) scale(1); }
+  to   { transform: translate3d(5vmin, -8vmin, 0) scale(1.14); }
+}
+
+/* Rising hexes. Each mote is positioned and timed from custom properties set
+   once in JS, so the CSS stays static and the whole field costs one class. */
+.sky__motes {
+  position: absolute;
+  inset: 0;
+}
+
+.mote {
+  position: absolute;
+  left: var(--x);
+  bottom: -14vmin;
+  width: var(--size);
+  height: var(--size);
+  opacity: 0;
+  color: var(--mote-color, var(--accent));
+  animation: mote-rise var(--dur) linear var(--delay) infinite;
+  will-change: transform, opacity;
+}
+
+.mote svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+@keyframes mote-rise {
+  0%   { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0; }
+  10%  { opacity: var(--peak, 0.5); }
+  85%  { opacity: var(--peak, 0.5); }
+  100% { transform: translate3d(var(--sway), -118vh, 0) rotate(var(--spin)); opacity: 0; }
+}
+
 .menu {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 20px;
   align-content: start;
 }
 
+.menu__audio {
+  position: absolute;
+  top: calc(var(--sat) + 12px);
+  right: calc(var(--sar) + 14px);
+  display: flex;
+  gap: 8px;
+  z-index: 3;
+}
+
+.iconbtn {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+  color: var(--ink-dim);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  backdrop-filter: blur(8px);
+  transition:
+    transform var(--t-select) var(--ease),
+    color var(--t-select) var(--ease),
+    border-color var(--t-select) var(--ease),
+    box-shadow var(--t-select) var(--ease);
+}
+
+.iconbtn__glyph {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.iconbtn:active {
+  transform: scale(0.93);
+}
+
+.iconbtn[aria-pressed='true'] {
+  color: var(--ink);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
 .menu__masthead {
   text-align: center;
-  padding-top: 4px;
+  padding-top: 26px;
 }
 
 .menu__crest {
-  width: clamp(84px, 26vw, 122px);
-  margin: 0 auto 10px;
-  filter: drop-shadow(0 8px 22px rgba(109, 75, 214, 0.5));
+  width: clamp(112px, 34vw, 168px);
+  margin: 0 auto 14px;
+  filter: drop-shadow(0 10px 30px color-mix(in srgb, var(--accent) 55%, transparent));
+  animation: crest-float 6s ease-in-out infinite;
 }
 
 .menu__crest svg {
@@ -468,30 +644,89 @@ kbd {
   display: block;
 }
 
-.menu__title {
-  font-size: clamp(1.9rem, 8vw, 2.6rem);
-  line-height: 1.02;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+@keyframes crest-float {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50%      { transform: translateY(-7px) rotate(1deg); }
 }
 
-.menu__title span {
+.menu__title {
+  font-size: clamp(2.2rem, 9.5vw, 3.1rem);
+  line-height: 0.98;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.menu__title-a,
+.menu__title-b {
   display: block;
-  background: linear-gradient(92deg, var(--p1), var(--accent) 55%, var(--p2));
+}
+
+.menu__title-b {
+  background: linear-gradient(
+    92deg,
+    var(--p1) 0%,
+    var(--accent) 35%,
+    var(--title-spark) 55%,
+    var(--p2) 78%,
+    var(--p1) 100%
+  );
+  background-size: 260% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  animation: title-sweep 9s linear infinite;
+}
+
+@keyframes title-sweep {
+  from { background-position: 0% 50%; }
+  to   { background-position: 260% 50%; }
 }
 
 .menu__tagline {
-  margin-top: 6px;
-  color: var(--ink-dim);
-  font-size: 0.95rem;
+  margin-top: 10px;
+  color: var(--ink);
+  opacity: 0.78;
+  font-size: 0.98rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
 .menu__actions {
   display: grid;
   gap: 10px;
+}
+
+/* A slow highlight travelling across the primary action, so the eye lands on
+   the one thing a new player has to press. */
+.btn--shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn--shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 62%
+  );
+  transform: translateX(-120%);
+  animation: shine 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes shine {
+  0%, 55% { transform: translateX(-120%); }
+  85%, 100% { transform: translateX(120%); }
+}
+
+.btn--jumbo {
+  box-shadow:
+    0 8px 26px color-mix(in srgb, var(--accent-strong) 55%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent) inset;
 }
 
 .menu__setup {
@@ -506,6 +741,13 @@ kbd {
   min-width: 0;
 }
 
+.menu__setup .segmented,
+.menu__setup .boardcard,
+.menu__links .btn {
+  background: color-mix(in srgb, var(--surface) var(--veil), transparent);
+  backdrop-filter: blur(10px);
+}
+
 .option__label {
   display: block;
   padding: 0 0 7px;
@@ -513,13 +755,15 @@ kbd {
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--ink);
+  opacity: 0.6;
 }
 
 .option__hint {
   margin-top: 8px;
   font-size: 0.86rem;
-  color: var(--ink-dim);
+  color: var(--ink);
+  opacity: 0.75;
   min-height: 2.4em;
 }
 
@@ -581,8 +825,10 @@ kbd {
 
 .menu__stats {
   text-align: center;
-  color: var(--ink-faint);
+  color: var(--ink);
+  opacity: 0.62;
   font-size: 0.82rem;
+  font-weight: 500;
   min-height: 1.2em;
 }
 
@@ -1578,6 +1824,50 @@ kbd {
   display: none;
 }
 
+/* Boot failure / noscript ------------------------------------------------- */
+
+.bootnote,
+.bootfail {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 100;
+  margin: 0 auto;
+  max-width: 560px;
+  padding: 20px 22px calc(var(--sab) + 22px);
+  background: var(--surface);
+  border-top: 3px solid var(--danger);
+  color: var(--ink);
+  font-size: 0.94rem;
+  line-height: 1.5;
+  box-shadow: 0 -12px 40px rgba(4, 2, 14, 0.55);
+}
+
+.bootfail h2 {
+  font-size: 1.1rem;
+  margin-bottom: 8px;
+}
+
+.bootfail p + p {
+  margin-top: 10px;
+}
+
+.bootfail__how {
+  color: var(--ink-dim);
+  font-size: 0.88rem;
+}
+
+.bootfail code {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  color: var(--ink);
+}
+
 /* ----------------------------------------------------- 7. responsive tiers */
 
 /* Narrow phones: give the board every pixel of width it can get. The board is
@@ -1739,6 +2029,11 @@ kbd {
 
 /* Kill looping/decorative motion outright; keep state changes instant but
    still visible, so nothing important is communicated by animation alone. */
+.app[data-motion='reduced'] .sky__glow,
+.app[data-motion='reduced'] .mote,
+.app[data-motion='reduced'] .menu__crest,
+.app[data-motion='reduced'] .menu__title-b,
+.app[data-motion='reduced'] .btn--shine::after,
 .app[data-motion='reduced'] .piece__idle,
 .app[data-motion='reduced'] .cell[data-selected='true'] .selectring,
 .app[data-motion='reduced'] .thinking__dots i,
@@ -1752,6 +2047,11 @@ kbd {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .app:not([data-motion='full']) .sky__glow,
+  .app:not([data-motion='full']) .mote,
+  .app:not([data-motion='full']) .menu__crest,
+  .app:not([data-motion='full']) .menu__title-b,
+  .app:not([data-motion='full']) .btn--shine::after,
   .app:not([data-motion='full']) .piece__idle,
   .app:not([data-motion='full']) .cell[data-selected='true'] .selectring,
   .app:not([data-motion='full']) .thinking__dots i,
@@ -1762,6 +2062,29 @@ kbd {
   .app:not([data-motion='full']) .overlay,
   .app:not([data-motion='full']) .peek {
     animation: none !important;
+  }
+}
+
+/* A frozen gradient sweep can land on a transparent stop, so pin the fill. */
+.app[data-motion='reduced'] .menu__title-b,
+.app[data-motion='reduced'] .mote,
+.app[data-motion='reduced'] .btn--shine::after {
+  background-position: 12% 50%;
+}
+
+.app[data-motion='reduced'] .mote,
+.app[data-motion='reduced'] .btn--shine::after {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app:not([data-motion='full']) .menu__title-b {
+    background-position: 12% 50%;
+  }
+
+  .app:not([data-motion='full']) .mote,
+  .app:not([data-motion='full']) .btn--shine::after {
+    display: none;
   }
 }
 

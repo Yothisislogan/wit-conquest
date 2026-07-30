@@ -7,8 +7,6 @@
  * thing allowed to change a game state.
  */
 
-import './styles/app.css';
-
 import { DIFFICULTIES, type Difficulty } from './ai/types.ts';
 import { getAllBoards, getBoard, resolveBoardId } from './data/boards.ts';
 import {
@@ -40,6 +38,7 @@ import { createBoardThumbnail } from './ui/board-thumb.ts';
 import { installBoardInput } from './ui/input-controller.ts';
 import { createCrest, createMonsterBadge, TEAM_NAMES } from './ui/monsters.ts';
 import { bindSegmented, bindSwitch, Dialog, ScreenManager } from './ui/screens.ts';
+import { renderSky } from './ui/sky.ts';
 import { SoundController } from './ui/sound-controller.ts';
 import { Tutorial } from './ui/tutorial.ts';
 
@@ -130,6 +129,7 @@ let peekTimer: ReturnType<typeof setTimeout> | null = null;
 /* --------------------------------------------------------------- menu chrome */
 
 need<HTMLElement>('menu-crest').replaceChildren(createCrest());
+renderSky(need<HTMLElement>('menu-motes'), { enabled: motion.enabled });
 
 for (const player of [1, 2] as const) {
   const holder = document.querySelector<HTMLElement>(`[data-monster="${player}"]`);
@@ -834,6 +834,7 @@ screens.onChange((screen) => {
 });
 
 motion.onChange((enabled) => {
+  renderSky(need<HTMLElement>('menu-motes'), { enabled });
   renderer?.setMotionEnabled(enabled);
   controller?.setPacing(pacingForMotion(enabled));
 });
@@ -878,3 +879,13 @@ screens.show('menu', { remember: false });
 if (params.get('start') === '1') {
   startMatch({ resume: params.get('resume') === '1' });
 }
+
+// The inline watchdog in index.html shows a "could not start" notice unless
+// this flag appears, which is the only reliable signal that the module graph
+// actually executed.
+declare global {
+  interface Window {
+    __monsterTerritoryBooted?: boolean;
+  }
+}
+window.__monsterTerritoryBooted = true;
