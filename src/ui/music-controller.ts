@@ -74,11 +74,14 @@ const TAIL = 0.05;
 const MIN_GAIN = 0.0001;
 /**
  * Ceiling of the whole music bed on the shared bus, before the volume trim.
- * The voices sum to roughly unity at their busiest, so a full-volume bed peaks
- * near 0.13 — under the shared compressor's -18 dBFS threshold and far below
- * the cues, which is the point: music must never mask a move.
+ *
+ * The busiest moment of the busiest scene sums to ~1.15 across its voices if
+ * they were all in phase, so a full-volume bed peaks at 0.17 worst case and
+ * nearer 0.12 in practice: below the shared compressor's -18 dBFS threshold,
+ * and far below the cues. That is the whole point — music must never mask a
+ * move, and a cue must always cut through it.
  */
-const BED_PEAK = 0.18;
+const BED_PEAK = 0.15;
 /**
  * A frozen tab can leave the scheduler seconds behind. Cap the catch-up so it
  * resyncs (see `tick`) instead of firing a minute of music at once.
@@ -244,11 +247,11 @@ const SCENES: Record<MusicScene, SceneSpec> = {
     level: 1,
     fadeIn: CROSSFADE,
     seed: 0x6d656e75,
-    padPeak: 0.075,
-    bassPeak: 0.24,
+    padPeak: 0.07,
+    bassPeak: 0.22,
     filterLo: 620,
     filterHi: 1550,
-    arp: { barChance: 0.72, peak: 0.16, length: 0.9 },
+    arp: { barChance: 0.72, peak: 0.15, length: 0.9 },
     flourish: null,
   },
 
@@ -259,7 +262,7 @@ const SCENES: Record<MusicScene, SceneSpec> = {
     stepsPerBar: 8,
     barsPerChord: 2,
     progression: PROGRESSION,
-    level: 0.6,
+    level: 0.66,
     fadeIn: CROSSFADE,
     seed: 0x6d617463,
     padPeak: 0.07,

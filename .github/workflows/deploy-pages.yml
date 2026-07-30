@@ -1,0 +1,72 @@
+# Builds Monster Territory and publishes the built game to GitHub Pages.
+#
+# This replaces the Jekyll workflow that was here before. Jekyll copies the
+# repository as-is; it does not run Vite and cannot compile TypeScript, so the
+# published site was the raw source — and because the browser refuses to execute
+# `/src/main.ts`, visitors got an unstyled page with no game on it. The entry
+# point has to be built first, and it is `dist/` that gets published.
+name: Deploy Monster Territory to GitHub Pages
+
+on:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and never cancel one that is already publishing.
+concurrency:
+  group: 'pages'
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # A broken build should fail here rather than reach players, so the type
+      # check and the rules tests gate the deploy.
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        # `base` is './' and the service worker resolves against its own scope,
+        # so the same output works from a project sub-path such as
+        # https://<user>.github.io/wit-conquest/ with no extra configuration.
+        run: npm run build
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload built site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -22,7 +22,7 @@ import { SoundController } from './sound-controller.ts';
 const ALL_SCENES: MusicScene[] = ['menu', 'match', 'victory', 'defeat'];
 
 /** Peak of the bed on the shared bus, mirroring `BED_PEAK` in the engine. */
-const BED_PEAK = 0.18;
+const BED_PEAK = 0.15;
 
 // ---------------------------------------------------------------------------
 // Suite 1 — no Web Audio available
@@ -386,7 +386,9 @@ function mixGain(ctx: FakeAudioContext): FakeGain {
 /** The per-scene cross-fade gains, oldest first. */
 function layerGains(ctx: FakeAudioContext): FakeGain[] {
   const mix = mixGain(ctx);
-  return ctx.created.filter((node): node is FakeGain => node instanceof FakeGain && node !== mix && node.connections.includes(mix));
+  return ctx.created.filter(
+    (node): node is FakeGain => node instanceof FakeGain && node !== mix && node.connections.includes(mix),
+  );
 }
 
 function reachable(node: FakeNode): Set<FakeNode> {

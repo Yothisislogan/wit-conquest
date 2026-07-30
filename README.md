@@ -31,7 +31,9 @@ npm run dev        # http://localhost:5173
 | `npm run test:all`    | Type-check, unit tests, end-to-end tests                 |
 | `node scripts/generate-icons.mjs` | Regenerates the PWA icons from code         |
 
-Deploy by serving `dist/` as static files. `base` is `./`, so a sub-path such as
+`.github/workflows/deploy-pages.yml` builds and publishes the game to GitHub
+Pages on every push to `main`. Deploy anywhere else by serving `dist/` as static
+files. `base` is `./`, so a sub-path such as
 `https://example.com/games/monsters/` works without reconfiguration.
 
 > **Opening `index.html` from the source folder will not work**, and neither

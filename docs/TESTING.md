@@ -7,7 +7,7 @@ npm run test:e2e    # Playwright
 npm run test:all    # all three
 ```
 
-Both suites are green at the time of writing: **165 unit tests** and **198
+Both suites are green at the time of writing: **201 unit tests** and **238
 end-to-end tests** across four viewport profiles.
 
 ## Unit tests (Vitest)
@@ -95,13 +95,19 @@ Kept as a record of what the tests are actually worth:
 3. **The board overflowed the viewport on short, wide screens.** An SVG with a
    `viewBox` is a replaced element with an intrinsic ratio, so its automatic grid
    minimum size beat `height: 100%`.
-4. **The whole page could render unstyled.** The stylesheet was imported from
+4. **GitHub Pages published the raw source.** The Pages workflow used
+   `jekyll-build-pages` with `source: ./`, which copies the repository as-is —
+   Jekyll does not run Vite and cannot compile TypeScript, so visitors got an
+   unstyled page with no game on it. Replaced with a workflow that installs,
+   type-checks, tests, builds and publishes `dist/`. The built output was
+   verified serving from a project sub-path.
+5. **The whole page could render unstyled.** The stylesheet was imported from
    `src/main.ts`, so anything that stopped the module graph — most easily,
    opening the source folder instead of a build — took the styling down with it
    and left raw browser defaults on screen. The stylesheet is now linked from
    the HTML, and an inline watchdog explains the failure instead of leaving a
    half-rendered page. Covered by `title.spec.ts`.
-5. **"Resume match" showed on a fresh install.** The user-agent
+6. **"Resume match" showed on a fresh install.** The user-agent
    `[hidden] { display: none }` rule is a bare attribute selector, so
    `.btn { display: inline-flex }` beat it. The attribute is now authoritative
    for every component.
