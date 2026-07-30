@@ -38,6 +38,7 @@ import { createBoardThumbnail } from './ui/board-thumb.ts';
 import { installBoardInput } from './ui/input-controller.ts';
 import { createCrest, createMonsterBadge, TEAM_NAMES } from './ui/monsters.ts';
 import { bindSegmented, bindSwitch, Dialog, ScreenManager } from './ui/screens.ts';
+import { MusicController, type MusicScene } from './ui/music-controller.ts';
 import { renderSky } from './ui/sky.ts';
 import { SoundController } from './ui/sound-controller.ts';
 import { Tutorial } from './ui/tutorial.ts';
@@ -100,6 +101,9 @@ function applyUrlOverrides(): void {
 
   const soundParam = params.get('sound');
   if (soundParam === 'on' || soundParam === 'off') settings.soundEnabled = soundParam === 'on';
+
+  const musicParam = params.get('music');
+  if (musicParam === 'on' || musicParam === 'off') settings.musicEnabled = musicParam === 'on';
 }
 
 applyUrlOverrides();
@@ -113,6 +117,12 @@ app.setAttribute('data-contrast', settings.contrast);
 
 const announcer = new Announcer();
 const sound = new SoundController({ enabled: settings.soundEnabled, volume: settings.volume });
+// Music shares the effects' audio graph so the two pass through one compressor
+// and a loud cue can never be buried under the bed.
+const music = new MusicController(() => sound.bus(), {
+  enabled: settings.musicEnabled,
+  volume: settings.musicVolume,
+});
 const screens = new ScreenManager();
 
 const pauseDialog = new Dialog(need<HTMLElement>('overlay-pause'), need<HTMLElement>('pause-dialog'));
@@ -225,6 +235,7 @@ updateMenuStats();
 /* ------------------------------------------------------------ sound toggles */
 
 const soundButtons = [need<HTMLElement>('btn-sound-menu'), need<HTMLElement>('btn-sound-game')];
+const musicButtons = [need<HTMLElement>('btn-music-menu')];
 
 function syncSoundUi(): void {
   for (const button of soundButtons) {
@@ -249,9 +260,59 @@ for (const button of soundButtons) {
   button.addEventListener('click', () => setSoundEnabled(!settings.soundEnabled));
 }
 
+function syncMusicUi(): void {
+  for (const button of musicButtons) {
+    button.setAttribute('aria-pressed', String(settings.musicEnabled));
+    const icon = button.querySelector('[data-music-icon]');
+    const label = button.querySelector('[data-music-label]');
+    // A crossed-out note reads as "off" without relying on the pressed state.
+    if (icon) icon.textContent = settings.musicEnabled ? '\u{266B}' : '\u{266A}';
+    if (label) label.textContent = settings.musicEnabled ? 'Music on' : 'Music off';
+  }
+  setMusicSwitch(settings.musicEnabled);
+}
+
+function setMusicEnabled(enabled: boolean): void {
+  settings.musicEnabled = enabled;
+  saveSettings(settings);
+  music.setEnabled(enabled);
+  if (enabled) void sound.unlock().then(() => music.play(currentMusicScene()));
+  else music.stop();
+  syncMusicUi();
+}
+
+for (const button of musicButtons) {
+  button.addEventListener('click', () => setMusicEnabled(!settings.musicEnabled));
+}
+
+/** Which bed suits what is on screen right now. */
+function currentMusicScene(): MusicScene {
+  if (screens.current === 'game' && controller?.state.status === 'finished') {
+    if (settings.mode === 'local-two-player' || lastSummary?.winner === controller.humanPlayer) {
+      return 'victory';
+    }
+    return lastSummary?.winner === 'tie' ? 'menu' : 'defeat';
+  }
+  return screens.current === 'game' || screens.current === 'tutorial' ? 'match' : 'menu';
+}
+
+function syncMusicScene(): void {
+  if (!settings.musicEnabled) return;
+  music.play(currentMusicScene());
+}
+
 /* ----------------------------------------------------------------- settings */
 
 const setSoundSwitch = bindSwitch(need<HTMLElement>('set-sound'), setSoundEnabled);
+const setMusicSwitch = bindSwitch(need<HTMLElement>('set-music'), setMusicEnabled);
+
+const musicVolumeInput = need<HTMLInputElement>('set-music-volume');
+musicVolumeInput.addEventListener('input', () => {
+  settings.musicVolume = Number(musicVolumeInput.value) / 100;
+  music.setVolume(settings.musicVolume);
+});
+musicVolumeInput.addEventListener('change', () => saveSettings(settings));
+
 const setCoordsSwitch = bindSwitch(need<HTMLElement>('set-coords'), (checked) => {
   settings.showCoordinates = checked;
   saveSettings(settings);
@@ -319,12 +380,15 @@ need<HTMLButtonElement>('btn-reset-stats').addEventListener('click', () => {
 });
 
 setSoundSwitch(settings.soundEnabled);
+setMusicSwitch(settings.musicEnabled);
 setCoordsSwitch(settings.showCoordinates);
 setUndoSwitch(settings.allowUndoInLocalPlay);
 setMotionValue(settings.motion);
 setContrastValue(settings.contrast);
 volumeInput.value = String(Math.round(settings.volume * 100));
+musicVolumeInput.value = String(Math.round(settings.musicVolume * 100));
 syncSoundUi();
+syncMusicUi();
 
 /* -------------------------------------------------------------- match setup */
 
@@ -612,6 +676,7 @@ function finishMatch(summary: MatchSummary): void {
   need<HTMLElement>('turnpill').hidden = false;
   updateMenuStats();
   renderStatGrid();
+  syncMusicScene();
 
   // The final board is the most interesting thing on screen, so it is left
   // visible for a beat and the result sheet is offered rather than forced.
@@ -831,6 +896,7 @@ need<HTMLButtonElement>('btn-tutorial-skip').addEventListener('click', () => tut
 screens.onChange((screen) => {
   if (screen !== 'tutorial' && tutorial.isActive) tutorial.stop(false);
   if (screen === 'menu') refreshResumeButton();
+  syncMusicScene();
 });
 
 motion.onChange((enabled) => {
@@ -843,7 +909,23 @@ motion.onChange((enabled) => {
 
 // A rotation or a tab switch must never lose the match. The controller writes a
 // save after every move; this is a belt-and-braces flush for backgrounding.
+function armAudioOnFirstGesture(): void {
+  const start = (): void => {
+    void sound.unlock().then(() => {
+      if (settings.musicEnabled) music.play(currentMusicScene());
+    });
+  };
+  for (const type of ['pointerdown', 'keydown'] as const) {
+    window.addEventListener(type, start, { once: true, capture: true });
+  }
+}
+armAudioOnFirstGesture();
+
 document.addEventListener('visibilitychange', () => {
+  // A soundtrack playing to a backgrounded tab is just battery drain.
+  if (document.visibilityState === 'hidden') music.suspend();
+  else music.resume();
+
   if (document.visibilityState === 'hidden' && controller?.state.status === 'playing') {
     refreshResumeButton();
   }

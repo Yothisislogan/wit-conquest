@@ -585,6 +585,33 @@ export class SoundController {
     }
   }
 
+  /**
+   * Lazily-created shared audio graph, or null when Web Audio is unavailable.
+   *
+   * Exposed so the music engine can render into the *same* context and the same
+   * compressor. Two reasons it must share rather than build its own:
+   *  - iOS caps how many AudioContexts a page may hold, and a second one there
+   *    is simply refused — the page gets one, so this is it.
+   *  - Sharing the compressor means a loud cue and the music bed are limited
+   *    together. Separate graphs would sum *after* limiting and could clip.
+   *
+   * The returned destination sits ahead of the effects volume trim, so anything
+   * routed here is also scaled by {@link volume}: callers that want an
+   * independent level must apply their own gain, and a zero effects volume
+   * silences the shared bus.
+   */
+  bus(): { ctx: AudioContext; destination: AudioNode } | null {
+    try {
+      const ctx = this.context();
+      if (!ctx) return null;
+      return { ctx, destination: this.compressor ?? ctx.destination };
+    } catch {
+      // `context()` already swallows its own failures; this is belt and braces
+      // so a caller in a hostile environment still just gets "no audio".
+      return null;
+    }
+  }
+
   /** convert cue scales with how many pieces flipped (1..6+) */
   playConversion(count: number): void {
     const safe = typeof count === 'number' && Number.isFinite(count) ? clamp(Math.floor(count), 1, 6) : 1;

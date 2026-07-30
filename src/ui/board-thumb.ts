@@ -24,21 +24,23 @@ export function createBoardThumbnail(geo: BoardGeometry): SVGSVGElement {
   const points = hexPolygonPoints(0, 0, 0.9);
   for (const cell of geo.cells) {
     const state = geo.initialBoard[cell.index]!;
+    // A 74px preview needs more separation than a full-size board does, so the
+    // thumbnail has its own palette rather than reusing the in-game cell tokens.
     const fill =
       state === 'blocked'
-        ? 'var(--cell-blocked)'
+        ? 'var(--thumb-blocked)'
         : state === 'player1'
           ? 'var(--p1)'
           : state === 'player2'
             ? 'var(--p2)'
-            : 'var(--cell-empty-2)';
+            : 'var(--thumb-empty)';
     svg.appendChild(
       svgEl('polygon', {
         points,
         transform: `translate(${cell.x.toFixed(3)} ${cell.y.toFixed(3)})`,
         fill,
-        stroke: 'var(--cell-line)',
-        'stroke-width': 0.06,
+        stroke: 'var(--thumb-line)',
+        'stroke-width': 0.08,
       }),
     );
   }

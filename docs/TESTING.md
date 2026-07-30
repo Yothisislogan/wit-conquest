@@ -26,6 +26,7 @@ the `*.dom.test.ts` suffix and run under jsdom.
 | `game/game-controller.dom.test.ts` | Selection, mis-tap handling, undo policy, AI turn scheduling, persistence and resume                       |
 | `ai/ai.test.ts`                  | Legality across full playouts on all layouts and difficulties, time budgets, determinism, strength ordering  |
 | `ui/sound-controller.test.ts`    | Every method is a safe no-op with no Web Audio, hostile stubs, rate limiting, volume clamping                |
+| `ui/music-controller.test.ts`    | Scene changes and cross-fades, scheduler lifecycle, node-leak bounds, determinism, safe no-ops with no Web Audio |
 | `pwa/*.test.ts`                  | Service-worker template contract, precache manifest, registration behaviour                                  |
 
 Two of these are property-style rather than example-based: `rules.test.ts` plays
@@ -48,6 +49,7 @@ touch projects drive the game with real taps; desktop uses clicks, through the
 | `accessibility.spec.ts`| Cell labels, named move types, grid roles, live-region announcements, arrow-key navigation, Escape, `R`-to-restart confirmation, roving tabindex, dialog focus trapping, reduced motion, high contrast, coordinate labels |
 | `tutorial.spec.ts`     | Each lesson advances by doing the thing it teaches; Next/Back/Skip                               |
 | `pwa.spec.ts`          | Manifest validity, every icon served and non-trivial, theme colour, service worker registration, full offline reload and offline play against the computer |
+| `title.spec.ts`        | Crest, wordmark and backdrop render; the backdrop is deterministic and decorative-only; reduced motion removes every decorative animation; the boot-failure notice stays hidden on a healthy start; music toggling, persistence and independent volume |
 | `persistence.spec.ts`  | Resuming an interrupted match from the menu and across a reload, starting fresh discarding the save, preferences surviving a reload, sound toggling, statistics and reset, board previews |
 
 Deep links make setup deterministic: `?start=1&board=islands&mode=local-two-player&motion=reduced&seed=42`.
@@ -93,7 +95,13 @@ Kept as a record of what the tests are actually worth:
 3. **The board overflowed the viewport on short, wide screens.** An SVG with a
    `viewBox` is a replaced element with an intrinsic ratio, so its automatic grid
    minimum size beat `height: 100%`.
-4. **"Resume match" showed on a fresh install.** The user-agent
+4. **The whole page could render unstyled.** The stylesheet was imported from
+   `src/main.ts`, so anything that stopped the module graph — most easily,
+   opening the source folder instead of a build — took the styling down with it
+   and left raw browser defaults on screen. The stylesheet is now linked from
+   the HTML, and an inline watchdog explains the failure instead of leaving a
+   half-rendered page. Covered by `title.spec.ts`.
+5. **"Resume match" showed on a fresh install.** The user-agent
    `[hidden] { display: none }` rule is a bare attribute selector, so
    `.btn { display: inline-flex }` beat it. The attribute is now authoritative
    for every component.

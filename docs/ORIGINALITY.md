@@ -14,6 +14,7 @@ trust.
 | Board and UI artwork | CSS and SVG in this repository                                    |
 | App icons            | Rasterised from code by `scripts/generate-icons.mjs`              |
 | Sound effects        | Synthesised at runtime by the Web Audio API                       |
+| Music                | Generated at runtime by the Web Audio API                         |
 | Fonts                | System font stack only — no font files are bundled or downloaded  |
 | Third-party runtime deps | None                                                          |
 
@@ -72,6 +73,12 @@ identical on every device.
 
 Cues: select, deselect, clone, jump, convert (scaled by how many monsters
 flipped), turn change, win, lose, tie, invalid action, UI tap.
+
+The soundtrack in `src/ui/music-controller.ts` is generated the same way. There
+is no recorded, sequenced or licensed music anywhere in the project: a fixed
+scale and chord table written for this game is walked by a seeded deterministic
+generator, and each note is rendered by oscillators and envelopes through the
+same audio graph as the effects. Nothing was transcribed from an existing piece.
 
 ## Board layouts
 

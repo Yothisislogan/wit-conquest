@@ -34,6 +34,13 @@ npm run dev        # http://localhost:5173
 Deploy by serving `dist/` as static files. `base` is `./`, so a sub-path such as
 `https://example.com/games/monsters/` works without reconfiguration.
 
+> **Opening `index.html` from the source folder will not work**, and neither
+> will serving the repository root with a plain static server. The entry point
+> is TypeScript, which browsers refuse to execute, so nothing runs. Use
+> `npm run dev` while developing, or `npm run build && npm run preview` to look
+> at the real thing. If you hit it anyway, the page now says so rather than
+> leaving you with a half-rendered screen.
+
 ---
 
 ## How the game works
@@ -134,6 +141,26 @@ indicator shows while it works, and there is a synchronous fallback for browsers
 without workers.
 
 ---
+
+## Sound and music
+
+Nothing is sampled. Every sound effect and every note of the soundtrack is
+synthesised in the browser at runtime from oscillators, envelopes and filters,
+which is why the whole game is a few tens of kilobytes and works offline.
+
+- **Effects** — select, clone, jump, convert (scaled by how many monsters
+  flipped), turn change, win, lose, tie, invalid action, UI tap.
+- **Music** — a slow generative ambient bed with four scenes: a warm one for the
+  title screen, a sparser and quieter one for play so it never competes with the
+  cues, and short flourishes for a win and a loss. Notes are chosen from a fixed
+  scale and chord table by a seeded generator, scheduled with a lookahead
+  scheduler so it never drifts or stutters.
+
+Both are off until you switch them on — browser autoplay policy requires a
+gesture, and a surprise soundtrack is nobody's idea of a good first impression.
+Effects and music have independent volume controls, the music shares the
+effects' audio graph so one compressor keeps the mix under control, and it
+suspends itself when the tab is hidden.
 
 ## Accessibility
 

@@ -79,6 +79,11 @@
   /* Warm mid-stop of the title gradient; it has to stay legible against the
      backdrop, so it goes pale on the dark scheme and deep on the light one. */
   --title-spark: #ffd6a0;
+
+  /* Board previews in the picker. */
+  --thumb-empty: #4a4090;
+  --thumb-blocked: #211a45;
+  --thumb-line: #6a5eb8;
 }
 
 @media (prefers-color-scheme: light) {
@@ -117,6 +122,10 @@
     --sky-glow-blur: 70px;
     --veil: 82%;
     --title-spark: #b8560a;
+
+    --thumb-empty: #cfc4f2;
+    --thumb-blocked: #8f83bd;
+    --thumb-line: #ffffff;
   }
 }
 
@@ -141,6 +150,9 @@
   --sky-glow-opacity: 0.22;
   --veil: 100%;
   --title-spark: #ffd6a0;
+  --thumb-empty: #3b3480;
+  --thumb-blocked: #0d0a22;
+  --thumb-line: #b3a9ee;
 }
 .app[data-contrast='high'] .hex {
   stroke-width: 0.09;
