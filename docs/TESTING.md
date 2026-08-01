@@ -7,7 +7,7 @@ npm run test:e2e    # Playwright
 npm run test:all    # all three
 ```
 
-Both suites are green at the time of writing: **209 unit tests** and **242
+Both suites are green at the time of writing: **209 unit tests** and **294
 end-to-end tests** across four viewport profiles.
 
 ## Unit tests (Vitest)
@@ -50,6 +50,8 @@ touch projects drive the game with real taps; desktop uses clicks, through the
 | `tutorial.spec.ts`     | Each lesson advances by doing the thing it teaches; Next/Back/Skip                               |
 | `pwa.spec.ts`          | Manifest validity, every icon served and non-trivial, theme colour, service worker registration, full offline reload and offline play against the computer |
 | `title.spec.ts`        | Crest, wordmark and backdrop render; the backdrop is deterministic and decorative-only; reduced motion removes every decorative animation; the boot-failure notice stays hidden on a healthy start; music toggling, persistence and independent volume |
+| `ai-legality.spec.ts`  | Every rendered computer move on 3 difficulties x 3 boards is a legal clone or jump, checked purely from before/after board diffs. The only AI coverage that runs against the real Web Worker |
+| `move-legibility.spec.ts` | A jump leaves a trail from the space it left, a clone does not, and a skipped turn stays explained after the opponent moves again |
 | `persistence.spec.ts`  | Resuming an interrupted match from the menu and across a reload, starting fresh discarding the save, preferences surviving a reload, sound toggling, statistics and reset, board previews |
 
 Deep links make setup deterministic: `?start=1&board=islands&mode=local-two-player&motion=reduced&seed=42`.
@@ -89,25 +91,31 @@ Kept as a record of what the tests are actually worth:
    without `ignoreVary`, and any server sending `Vary: Origin` — Vite's own
    preview server does — turned every precache entry into a miss. Guarded now by
    both `pwa.spec.ts` and a unit test on the worker template.
-2. **Screen readers only heard the last announcement.** A move and the following
+2. **A skipped turn was unreadable.** When a player had no legal move the
+   opponent moved twice, and the message explaining why was replaced by routine
+   guidance a few hundred milliseconds later — so the opponent simply appeared
+   to take two turns. Reported as "the AI cheats". The explanation is now held
+   on screen. `move-legibility.spec.ts` builds the position through the game's
+   own save format and fails if the message is replaced.
+3. **Screen readers only heard the last announcement.** A move and the following
    turn change wrote to the same live region in the same tick. Messages raised
    together are now coalesced into one utterance.
-3. **The board overflowed the viewport on short, wide screens.** An SVG with a
+4. **The board overflowed the viewport on short, wide screens.** An SVG with a
    `viewBox` is a replaced element with an intrinsic ratio, so its automatic grid
    minimum size beat `height: 100%`.
-4. **GitHub Pages published the raw source.** The Pages workflow used
+5. **GitHub Pages published the raw source.** The Pages workflow used
    `jekyll-build-pages` with `source: ./`, which copies the repository as-is —
    Jekyll does not run Vite and cannot compile TypeScript, so visitors got an
    unstyled page with no game on it. Replaced with a workflow that installs,
    type-checks, tests, builds and publishes `dist/`. The built output was
    verified serving from a project sub-path.
-5. **The whole page could render unstyled.** The stylesheet was imported from
+6. **The whole page could render unstyled.** The stylesheet was imported from
    `src/main.ts`, so anything that stopped the module graph — most easily,
    opening the source folder instead of a build — took the styling down with it
    and left raw browser defaults on screen. The stylesheet is now linked from
    the HTML, and an inline watchdog explains the failure instead of leaving a
    half-rendered page. Covered by `title.spec.ts`.
-6. **"Resume match" showed on a fresh install.** The user-agent
+7. **"Resume match" showed on a fresh install.** The user-agent
    `[hidden] { display: none }` rule is a bare attribute selector, so
    `.btn { display: inline-flex }` beat it. The attribute is now authoritative
    for every component.

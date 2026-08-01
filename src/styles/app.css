@@ -1085,6 +1085,18 @@ kbd {
 
 .hintbar[data-tone='warn'] {
   color: var(--danger);
+  font-weight: 600;
+}
+
+/* A held message has to survive being glanced past, so it announces itself
+   once rather than appearing silently mid-turn. */
+.hintbar.is-calling {
+  animation: hint-call 620ms var(--ease) 2;
+}
+
+@keyframes hint-call {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.04); opacity: 0.72; }
 }
 
 .hintbar[data-tone='good'] {
@@ -1330,6 +1342,34 @@ kbd {
   }
 }
 
+/* Where the last jump came from. Coloured by the side that made it, so it also
+   answers "who just moved?" at a glance. */
+.trail-layer {
+  pointer-events: none;
+}
+
+.trail {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 0.1;
+  stroke-linecap: round;
+  stroke-dasharray: 0.26 0.22;
+  opacity: 0.85;
+}
+
+.trail-dot {
+  fill: currentColor;
+  opacity: 0.6;
+}
+
+.trail--p1 {
+  color: var(--p1);
+}
+
+.trail--p2 {
+  color: var(--p2);
+}
+
 .lastmove {
   fill: none;
   stroke: var(--ink-dim);
@@ -1340,11 +1380,67 @@ kbd {
 }
 
 .cell[data-lastmove='from'] .lastmove,
-.cell[data-lastmove='to'] .lastmove {
+.cell[data-lastmove='to'] /* Where the last jump came from. Coloured by the side that made it, so it also
+   answers "who just moved?" at a glance. */
+.trail-layer {
+  pointer-events: none;
+}
+
+.trail {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 0.1;
+  stroke-linecap: round;
+  stroke-dasharray: 0.26 0.22;
   opacity: 0.85;
 }
 
-.cell[data-lastmove='to'] .lastmove {
+.trail-dot {
+  fill: currentColor;
+  opacity: 0.6;
+}
+
+.trail--p1 {
+  color: var(--p1);
+}
+
+.trail--p2 {
+  color: var(--p2);
+}
+
+.lastmove {
+  opacity: 0.85;
+}
+
+.cell[data-lastmove='to'] /* Where the last jump came from. Coloured by the side that made it, so it also
+   answers "who just moved?" at a glance. */
+.trail-layer {
+  pointer-events: none;
+}
+
+.trail {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 0.1;
+  stroke-linecap: round;
+  stroke-dasharray: 0.26 0.22;
+  opacity: 0.85;
+}
+
+.trail-dot {
+  fill: currentColor;
+  opacity: 0.6;
+}
+
+.trail--p1 {
+  color: var(--p1);
+}
+
+.trail--p2 {
+  color: var(--p2);
+}
+
+.lastmove {
   stroke: var(--ink);
   stroke-dasharray: none;
 }

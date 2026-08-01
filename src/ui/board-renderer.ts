@@ -52,6 +52,8 @@ export class BoardRenderer {
   readonly geo: BoardGeometry;
   #cells: CellNodes[] = [];
   #effects: SVGGElement;
+  #trail: SVGGElement;
+  #trailKey = '';
   #describe: CellDescriber;
   #host: HTMLElement;
   #focusIndex = -1;
@@ -85,6 +87,11 @@ export class BoardRenderer {
       }
       this.svg.appendChild(row);
     }
+
+    // Drawn above the tiles but below nothing else: the trail has to be legible
+    // over the board without covering the monsters.
+    this.#trail = svgEl('g', { class: 'trail-layer', 'aria-hidden': 'true' });
+    this.svg.appendChild(this.#trail);
 
     this.#effects = svgEl('g', { class: 'hopper', 'aria-hidden': 'true' });
     this.svg.appendChild(this.#effects);
@@ -199,6 +206,47 @@ export class BoardRenderer {
       const selectable = cellState !== 'blocked';
       toggleAttr(nodes.group, 'aria-disabled', selectable ? null : 'true');
     }
+
+    this.#renderTrail(last);
+  }
+
+  /**
+   * Draws where the last jump came from.
+   *
+   * A jump is two spaces, which on a hex board is a real leap — far enough, and
+   * over enough other monsters, that without a trail it reads as a piece
+   * teleporting rather than moving. Cloning needs no trail: the original stays
+   * put, so the relationship is already on screen.
+   */
+  #renderTrail(move: Move | null): void {
+    const key = move && move.type === 'jump' ? `${move.from}-${move.to}` : '';
+    if (key === this.#trailKey) return;
+    this.#trailKey = key;
+    this.#trail.replaceChildren();
+    if (!move || move.type !== 'jump') return;
+
+    const from = this.geo.cells[move.from]!;
+    const to = this.geo.cells[move.to]!;
+    const midX = (from.x + to.x) / 2;
+    const midY = (from.y + to.y) / 2;
+    // Bow the curve perpendicular to the flight so it clears whatever the
+    // monster jumped over instead of drawing a line straight through it.
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const bow = 0.42;
+    const cx = midX + (-dy / length) * bow;
+    const cy = midY + (dx / length) * bow;
+
+    this.#trail.appendChild(
+      svgEl('path', {
+        class: `trail trail--p${move.player}`,
+        d: `M ${from.x.toFixed(3)} ${from.y.toFixed(3)} Q ${cx.toFixed(3)} ${cy.toFixed(3)} ${to.x.toFixed(3)} ${to.y.toFixed(3)}`,
+      }),
+    );
+    this.#trail.appendChild(
+      svgEl('circle', { class: `trail-dot trail--p${move.player}`, cx: from.x, cy: from.y, r: 0.17 }),
+    );
   }
 
   #setPiece(nodes: CellNodes, cellState: CellState, animate: boolean): void {

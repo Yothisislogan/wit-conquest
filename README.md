@@ -58,12 +58,16 @@ starts with an advantage.
 - **Clone** — move to an empty space one step away. Your monster stays and a copy
   appears. Marked on the board with a solid dot.
 - **Jump** — move to an empty space exactly two steps away. The space you left
-  becomes empty. Marked with a hollow ring. Jumps ignore whatever lies between.
+  becomes empty. Marked with a hollow ring. Jumps ignore whatever lies between,
+  including obstacles, so a monster can cross a wall that no clone could — the
+  board draws a trail from where it jumped so the leap reads as a move.
 
 **Conversion.** After landing, every opposing monster directly adjacent to the
 destination flips to the mover.
 
-**Ending.** A player with no legal move is skipped and the other keeps playing.
+**Ending.** A player with no legal move is skipped and the other keeps playing —
+so the opponent really can move twice in a row, and the game says so when it
+happens rather than leaving you to wonder.
 The match ends when neither can move, when the board fills, or when a player is
 wiped out. Highest piece count wins; ties are a real result. Scores are always a
 straight count of the monsters on the board.

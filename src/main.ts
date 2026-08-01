@@ -460,6 +460,7 @@ function startMatch(options: { resume?: boolean } = {}): void {
   ];
 
   previousScores = { player1: 0, player2: 0 };
+  hintHeldUntil = 0;
   announcedPlayer = null;
   lastSummary = null;
   hidePeek();
@@ -515,7 +516,9 @@ function onControllerEvent(event: ControllerEvent): void {
 
     case 'skipped': {
       const message = describeSkip(describeContext(), event.player);
-      setHint(message, 'warn');
+      // Held, because the opponent's follow-up move lands moments later and
+      // would otherwise erase the only explanation of why they moved twice.
+      setHint(message, 'warn', { holdMs: 2600 });
       announcer.alert(message);
       break;
     }
@@ -535,7 +538,8 @@ function onControllerEvent(event: ControllerEvent): void {
 
     case 'undo':
       sound.play('ui-tap');
-      setHint('Move taken back.');
+      hintHeldUntil = 0;
+      setHint('Move taken back.', 'neutral', { force: true });
       announcer.say('Move taken back.');
       clearMoveLog();
       break;
@@ -627,10 +631,30 @@ function updateHintForState(state: GameState): void {
   setHint(`Tap a dot to clone (${clone.length}) or a ring to jump (${jump.length}). Tap again to cancel.`);
 }
 
-function setHint(text: string, tone: 'neutral' | 'warn' | 'good' = 'neutral'): void {
+/**
+ * Until this moment passes, routine hints will not overwrite what is showing.
+ *
+ * Without it a skipped turn was announced and then wiped ~300ms later by the
+ * opponent's next move, so the player saw the computer move twice in a row with
+ * no explanation — which reads as cheating rather than as the rule it is.
+ */
+let hintHeldUntil = 0;
+
+function setHint(
+  text: string,
+  tone: 'neutral' | 'warn' | 'good' = 'neutral',
+  { holdMs = 0, force = false }: { holdMs?: number; force?: boolean } = {},
+): void {
+  if (!force && holdMs === 0 && Date.now() < hintHeldUntil) return;
+
   const hint = need<HTMLElement>('hintbar');
   hint.textContent = text;
   hint.setAttribute('data-tone', tone);
+
+  if (holdMs > 0) {
+    hintHeldUntil = Date.now() + holdMs;
+    pulse(hint, 'is-calling', holdMs);
+  }
 }
 
 function syncControls(): void {
@@ -664,7 +688,7 @@ function finishMatch(summary: MatchSummary): void {
   const ctx = describeContext();
   const message = describeResult(ctx, summary.winner, summary.scores, summary.label);
   announcer.alert(message);
-  setHint(message, summary.winner === 'tie' ? 'neutral' : 'good');
+  setHint(message, summary.winner === 'tie' ? 'neutral' : 'good', { force: true });
 
   if (settings.mode === 'vs-computer') {
     sound.play(summary.winner === 'tie' ? 'tie' : summary.winner === 1 ? 'win' : 'lose');
